@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Music Notification Plugin</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <main class="container">
+      <h1>Music Notification Plugin</h1>
+
+      <!-- URL Input Section -->
+      <div class="section">
+        <h3>Audio Source</h3>
+        <div class="input-group">
+          <input type="text" id="urlInput" placeholder="Audio URL (http://...)" />
+          <input type="text" id="titleInput" placeholder="Title" />
+          <input type="text" id="artistInput" placeholder="Artist" />
+          <input type="text" id="albumInput" placeholder="Album" />
+        </div>
+      </div>
+
+      <!-- Controls Section -->
+      <div class="section">
+        <h3>Controls</h3>
+        <div class="controls">
+          <button id="playBtn">Play</button>
+          <button id="pauseBtn">Pause</button>
+          <button id="resumeBtn">Resume</button>
+          <button id="stopBtn">Stop</button>
+          <button id="prevBtn">Previous</button>
+          <button id="nextBtn">Next</button>
+          <button id="seekBtn">Seek 30s</button>
+          <button id="stateBtn">Get State</button>
+        </div>
+      </div>
+
+      <!-- Status Display -->
+      <div class="section">
+        <h3>Status</h3>
+        <div class="status">
+          <p>Playing: <span id="isPlaying">No</span></p>
+          <p>Position: <span id="position">0</span>s / <span id="duration">0</span>s</p>
+        </div>
+      </div>
+
+      <!-- Log Section -->
+      <div class="section">
+        <h3>Log</h3>
+        <div id="logOutput" class="log"></div>
+      </div>
+    </main>
+  </body>
+</html>
