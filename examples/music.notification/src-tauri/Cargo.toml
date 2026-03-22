@@ -20,4 +20,6 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["devtools"] }
 tauri-plugin-music-notification-api = { path = "../../../" }
+tiny_http = "0.12"
+jni = "0.21"
 

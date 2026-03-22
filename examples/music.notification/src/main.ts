@@ -1,4 +1,4 @@
-import { play, pause, resume, stop, next, previous, seek, getState, type PlaybackState } from "music-notification-api";
+import { play, pause, resume, stop, next, previous, seek, getState, startServer, type PlaybackState } from "music-notification-api";
 
 // UI Elements
 const urlInput = document.querySelector("#urlInput") as HTMLInputElement;
@@ -14,6 +14,7 @@ const prevBtn = document.querySelector("#prevBtn") as HTMLButtonElement;
 const nextBtn = document.querySelector("#nextBtn") as HTMLButtonElement;
 const seekBtn = document.querySelector("#seekBtn") as HTMLButtonElement;
 const stateBtn = document.querySelector("#stateBtn") as HTMLButtonElement;
+const startServerBtn = document.querySelector("#startServerBtn") as HTMLButtonElement;
 
 const isPlayingEl = document.querySelector("#isPlaying") as HTMLElement;
 const positionEl = document.querySelector("#position") as HTMLElement;
@@ -138,6 +139,20 @@ stateBtn.addEventListener("click", async () => {
     log(`State: playing=${state.isPlaying}, pos=${Math.floor(state.position / 1000)}s, dur=${Math.floor(state.duration / 1000)}s`);
   } catch (e) {
     log(`✗ Get state error: ${e}`, true);
+  }
+});
+
+startServerBtn.addEventListener("click", async () => {
+  log("Starting HTTP server on port 2090...");
+  try {
+    const result = await startServer();
+    if (result.success) {
+      log("✓ Server started - check http://localhost:2090");
+    } else {
+      log("✗ Server failed to start", true);
+    }
+  } catch (e) {
+    log(`✗ Start server error: ${e}`, true);
   }
 });
 

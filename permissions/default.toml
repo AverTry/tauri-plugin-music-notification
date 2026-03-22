@@ -9,5 +9,6 @@ permissions = [
   "allow-next",
   "allow-previous",
   "allow-seek",
-  "allow-get-state"
+  "allow-get-state",
+  "allow-start-server"
 ]

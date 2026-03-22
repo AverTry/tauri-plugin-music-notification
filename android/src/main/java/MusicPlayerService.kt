@@ -29,7 +29,7 @@ class MusicPlayerService : Service() {
         const val ACTION_NEXT = "com.plugin.music_notification.NEXT"
         const val ACTION_PREVIOUS = "com.plugin.music_notification.PREVIOUS"
         const val ACTION_SEEK = "com.plugin.music_notification.SEEK"
-        
+
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_ARTIST = "artist"
@@ -39,7 +39,33 @@ class MusicPlayerService : Service() {
         var instance: MusicPlayerService? = null
         private val tracks = mutableListOf<TrackInfo>()
         private var currentTrackIndex = 0
+
+        // Native library loader - tries to load from app classpath
+        fun loadNativeLibrary(context: Context) {
+            try {
+                System.loadLibrary("musicnotification_lib")
+                Log.d(TAG, "Native library musicnotification_lib loaded successfully")
+            } catch (e: UnsatisfiedLinkError) {
+                Log.e(TAG, "Failed to load native library: ${e.message}")
+                // Try loading using the app's classloader
+                try {
+                    val appClassLoader = context.applicationContext.classLoader
+                    val loadLibraryMethod = Class.forName("java.lang.System").getDeclaredMethod(
+                        "loadLibrary",
+                        String::class.java,
+                        ClassLoader::class.java
+                    )
+                    loadLibraryMethod.invoke(null, "musicnotification_lib", appClassLoader)
+                    Log.d(TAG, "Native library loaded via app classloader")
+                } catch (ex: Exception) {
+                    Log.e(TAG, "Failed to load native library via classloader: ${ex.message}")
+                }
+            }
+        }
     }
+
+    // Declare the native Rust function that starts the HTTP server (instance method)
+    private external fun startHttpServer()
 
     data class TrackInfo(
         val url: String,
@@ -110,6 +136,19 @@ class MusicPlayerService : Service() {
                 }
             }
         }
+
+        // Load the native library that contains the HTTP server
+        loadNativeLibrary(this)
+
+        // Start the Rust HTTP server - this will run in the background
+        Log.d(TAG, "Starting Rust HTTP server...")
+        try {
+            startHttpServer()
+            Log.d(TAG, "Rust HTTP server start called")
+        } catch (e: UnsatisfiedLinkError) {
+            Log.e(TAG, "Failed to call startHttpServer: ${e.message}")
+        }
+
         Log.d(TAG, "onCreate complete")
     }
 

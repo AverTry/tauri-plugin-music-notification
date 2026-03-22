@@ -13,6 +13,7 @@ Default permissions for the plugin
 - `allow-previous`
 - `allow-seek`
 - `allow-get-state`
+- `allow-start-server`
 
 ## Permission Table
 
@@ -227,6 +228,32 @@ Enables the seek command without any pre-configured scope.
 <td>
 
 Denies the seek command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-start-server`
+
+</td>
+<td>
+
+Enables the start_server command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-start-server`
+
+</td>
+<td>
+
+Denies the start_server command without any pre-configured scope.
 
 </td>
 </tr>
