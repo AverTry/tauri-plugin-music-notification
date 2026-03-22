@@ -8,6 +8,7 @@ A Tauri plugin for Android that provides music playback notifications with media
 - 🎮 Full playback controls (play, pause, resume, stop)
 - ⏭️ Next/Previous track navigation
 - ⏩ Seek to specific positions
+- 🔊 Volume control (app-only, not system volume)
 - 📊 Get current playback state
 - 🔔 Native Android media notification with controls
 - 🎨 Lock screen controls support
@@ -124,7 +125,7 @@ Support varies by Android version and device hardware.
 ### JavaScript/TypeScript
 
 ```typescript
-import { play, pause, resume, stop, next, previous, seek, getState } from 'music-notification-api';
+import { play, pause, resume, stop, next, previous, seek, getState, setVolume } from 'music-notification-api';
 
 // Play music
 await play({
@@ -151,6 +152,9 @@ await previous();
 
 // Seek to position (in milliseconds)
 await seek(30000); // Seek to 30 seconds
+
+// Set volume (0.0 to 1.0)
+await setVolume({ volume: 0.5 }); // Set to 50%
 
 // Get current playback state
 const state = await getState();
@@ -225,6 +229,17 @@ interface PlaybackState {
   duration: number;  // in milliseconds
 }
 ```
+
+### `setVolume(options: SetVolumeOptions)`
+
+Sets the playback volume for the current music player.
+
+**Parameters:**
+- `volume` (number): Volume level from 0.0 (silent) to 1.0 (full volume)
+
+**Returns:** `Promise<{ success: boolean; message?: string }>`
+
+**Note:** This controls only the app's audio volume, not the system volume. The actual output also depends on the system's media volume level.
 
 ## Platform Support
 
