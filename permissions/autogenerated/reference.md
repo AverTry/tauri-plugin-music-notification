@@ -13,6 +13,9 @@ Default permissions for the plugin
 - `allow-previous`
 - `allow-seek`
 - `allow-get-state`
+- `allow-start-service`
+- `allow-stop-service`
+- `allow-set-volume`
 
 ## Permission Table
 
@@ -234,6 +237,58 @@ Denies the seek command without any pre-configured scope.
 <tr>
 <td>
 
+`music-notification-api:allow-set-volume`
+
+</td>
+<td>
+
+Enables the set_volume command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-set-volume`
+
+</td>
+<td>
+
+Denies the set_volume command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-start-service`
+
+</td>
+<td>
+
+Enables the start_service command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-start-service`
+
+</td>
+<td>
+
+Denies the start_service command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `music-notification-api:allow-stop`
 
 </td>
@@ -253,6 +308,32 @@ Enables the stop command without any pre-configured scope.
 <td>
 
 Denies the stop command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-stop-service`
+
+</td>
+<td>
+
+Enables the stop_service command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-stop-service`
+
+</td>
+<td>
+
+Denies the stop_service command without any pre-configured scope.
 
 </td>
 </tr>

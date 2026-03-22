@@ -99,4 +99,25 @@ impl<R: Runtime> MusicNotification<R> {
       .run_mobile_plugin("getState", EmptyRequest {})
       .map_err(Into::into)
   }
+
+  pub fn start_service(&self) -> crate::Result<EmptyResponse> {
+    self
+      .0
+      .run_mobile_plugin("startService", EmptyRequest {})
+      .map_err(Into::into)
+  }
+
+  pub fn stop_service(&self) -> crate::Result<EmptyResponse> {
+    self
+      .0
+      .run_mobile_plugin("stopService", EmptyRequest {})
+      .map_err(Into::into)
+  }
+
+  pub fn set_volume(&self, payload: SetVolumeRequest) -> crate::Result<SetVolumeResponse> {
+    self
+      .0
+      .run_mobile_plugin("setVolume", payload)
+      .map_err(Into::into)
+  }
 }

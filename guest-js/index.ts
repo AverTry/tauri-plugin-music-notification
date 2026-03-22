@@ -56,3 +56,21 @@ export async function seek(position: number): Promise<{ success: boolean }> {
 export async function getState(): Promise<PlaybackState> {
   return await invoke<PlaybackState>('plugin:music-notification|get_state');
 }
+
+export async function startService(): Promise<{ success: boolean; message?: string }> {
+  return await invoke<{ success: boolean; message?: string }>('plugin:music-notification|start_service');
+}
+
+export async function stopService(): Promise<{ success: boolean; message?: string }> {
+  return await invoke<{ success: boolean; message?: string }>('plugin:music-notification|stop_service');
+}
+
+export interface SetVolumeOptions {
+  volume: number;
+}
+
+export async function setVolume(options: SetVolumeOptions): Promise<{ success: boolean; message?: string }> {
+  return await invoke<{ success: boolean; message?: string }>('plugin:music-notification|set_volume', {
+    payload: options,
+  });
+}

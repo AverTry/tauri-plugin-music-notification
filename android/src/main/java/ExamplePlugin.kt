@@ -28,6 +28,11 @@ class SeekArgs {
   var position: Long = 0
 }
 
+@InvokeArg
+class SetVolumeArgs {
+  var volume: Float = 0.5f
+}
+
 @TauriPlugin
 class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) {
 
@@ -193,7 +198,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
         try {
             val service = MusicPlayerService.instance
             val ret = JSObject()
-            
+
             if (service != null) {
                 val (isPlaying, position, duration) = service.getPlaybackState()
                 ret.put("isPlaying", isPlaying)
@@ -204,13 +209,79 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
                 ret.put("position", 0)
                 ret.put("duration", 0)
             }
-            
+
             invoke.resolve(ret)
         } catch (e: Exception) {
             val ret = JSObject()
             ret.put("isPlaying", false)
             ret.put("position", 0)
             ret.put("duration", 0)
+            invoke.resolve(ret)
+        }
+    }
+
+    @Command
+    fun startService(invoke: Invoke) {
+        try {
+            val serviceIntent = Intent(activity, MusicPlayerService::class.java).apply {
+                action = MusicPlayerService.ACTION_START_SERVICE
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                activity.startForegroundService(serviceIntent)
+            } else {
+                activity.startService(serviceIntent)
+            }
+
+            val ret = JSObject()
+            ret.put("success", true)
+            ret.put("message", "Service started")
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            val ret = JSObject()
+            ret.put("success", false)
+            ret.put("message", e.message)
+            invoke.resolve(ret)
+        }
+    }
+
+    @Command
+    fun stopService(invoke: Invoke) {
+        try {
+            val serviceIntent = Intent(activity, MusicPlayerService::class.java).apply {
+                action = MusicPlayerService.ACTION_STOP_SERVICE
+            }
+            activity.startService(serviceIntent)
+
+            val ret = JSObject()
+            ret.put("success", true)
+            ret.put("message", "Service stop requested")
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            val ret = JSObject()
+            ret.put("success", false)
+            ret.put("message", e.message)
+            invoke.resolve(ret)
+        }
+    }
+
+    @Command
+    fun setVolume(invoke: Invoke) {
+        try {
+            val args = invoke.parseArgs(SetVolumeArgs::class.java)
+            val serviceIntent = Intent(activity, MusicPlayerService::class.java).apply {
+                action = MusicPlayerService.ACTION_SET_VOLUME
+                putExtra(MusicPlayerService.EXTRA_VOLUME, args.volume)
+            }
+            activity.startService(serviceIntent)
+
+            val ret = JSObject()
+            ret.put("success", true)
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            val ret = JSObject()
+            ret.put("success", false)
+            ret.put("message", e.message)
             invoke.resolve(ret)
         }
     }

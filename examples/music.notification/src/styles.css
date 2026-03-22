@@ -96,6 +96,46 @@ button:active {
   background-color: #e8e8e8;
 }
 
+/* Volume Control */
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.volume-control input[type="range"] {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: #ddd;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.volume-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #646cff;
+  cursor: pointer;
+}
+
+.volume-control input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #646cff;
+  cursor: pointer;
+  border: none;
+}
+
+.volume-control span {
+  min-width: 45px;
+  font-weight: 600;
+  color: #646cff;
+}
+
 /* Status Section */
 .status {
   display: flex;
@@ -174,6 +214,22 @@ button:active {
   }
 
   .status span {
+    color: #24c8db;
+  }
+
+  .volume-control input[type="range"] {
+    background: #444;
+  }
+
+  .volume-control input[type="range"]::-webkit-slider-thumb {
+    background: #24c8db;
+  }
+
+  .volume-control input[type="range"]::-moz-range-thumb {
+    background: #24c8db;
+  }
+
+  .volume-control span {
     color: #24c8db;
   }
 }

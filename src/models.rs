@@ -45,3 +45,16 @@ pub struct PlaybackState {
   pub position: i64,
   pub duration: i64,
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetVolumeRequest {
+  pub volume: f32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetVolumeResponse {
+  pub success: bool,
+  pub message: Option<String>,
+}

@@ -69,3 +69,25 @@ pub(crate) async fn get_state<R: Runtime>(
 ) -> Result<PlaybackState> {
     app.music_notification().get_state()
 }
+
+#[command]
+pub(crate) async fn start_service<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<EmptyResponse> {
+    app.music_notification().start_service()
+}
+
+#[command]
+pub(crate) async fn stop_service<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<EmptyResponse> {
+    app.music_notification().stop_service()
+}
+
+#[command]
+pub(crate) async fn set_volume<R: Runtime>(
+    app: AppHandle<R>,
+    payload: SetVolumeRequest,
+) -> Result<SetVolumeResponse> {
+    app.music_notification().set_volume(payload)
+}

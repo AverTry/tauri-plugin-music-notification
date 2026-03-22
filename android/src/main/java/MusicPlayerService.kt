@@ -29,12 +29,16 @@ class MusicPlayerService : Service() {
         const val ACTION_NEXT = "com.plugin.music_notification.NEXT"
         const val ACTION_PREVIOUS = "com.plugin.music_notification.PREVIOUS"
         const val ACTION_SEEK = "com.plugin.music_notification.SEEK"
+        const val ACTION_START_SERVICE = "com.plugin.music_notification.START_SERVICE"
+        const val ACTION_STOP_SERVICE = "com.plugin.music_notification.STOP_SERVICE"
+        const val ACTION_SET_VOLUME = "com.plugin.music_notification.SET_VOLUME"
 
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_ARTIST = "artist"
         const val EXTRA_ALBUM = "album"
         const val EXTRA_POSITION = "position"
+        const val EXTRA_VOLUME = "volume"
 
         var instance: MusicPlayerService? = null
         private val tracks = mutableListOf<TrackInfo>()
@@ -66,6 +70,19 @@ class MusicPlayerService : Service() {
 
     // Declare the native Rust function that starts the HTTP server (instance method)
     private external fun startHttpServer()
+
+    // State tracking for service lifetime management
+    private var httpServerRunning = false
+    private var musicPlayerActive = false
+
+    private fun updateServiceLifetime() {
+        // Only stop service if both HTTP server and music player are done
+        if (!httpServerRunning && !musicPlayerActive) {
+            Log.d(TAG, "Both server and player done, stopping service")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
 
     data class TrackInfo(
         val url: String,
@@ -144,7 +161,8 @@ class MusicPlayerService : Service() {
         Log.d(TAG, "Starting Rust HTTP server...")
         try {
             startHttpServer()
-            Log.d(TAG, "Rust HTTP server start called")
+            httpServerRunning = true
+            Log.d(TAG, "Rust HTTP server started, service lifetime tied to server")
         } catch (e: UnsatisfiedLinkError) {
             Log.e(TAG, "Failed to call startHttpServer: ${e.message}")
         }
@@ -160,6 +178,16 @@ class MusicPlayerService : Service() {
 
         intent?.let {
             when (it.action) {
+                ACTION_START_SERVICE -> {
+                    Log.d(TAG, "Action: START_SERVICE")
+                    // Service already created with HTTP server running
+                    // Just ensure foreground is started
+                }
+                ACTION_STOP_SERVICE -> {
+                    Log.d(TAG, "Action: STOP_SERVICE")
+                    httpServerRunning = false
+                    updateServiceLifetime()
+                }
                 ACTION_PLAY -> {
                     Log.d(TAG, "Action: PLAY")
                     val url = it.getStringExtra(EXTRA_URL) ?: run {
@@ -197,6 +225,11 @@ class MusicPlayerService : Service() {
                     mediaPlayer?.seekTo(position.toInt())
                     updatePlaybackState()
                 }
+                ACTION_SET_VOLUME -> {
+                    val volume = it.getFloatExtra(EXTRA_VOLUME, 1.0f)
+                    Log.d(TAG, "Action: SET_VOLUME to $volume")
+                    mediaPlayer?.setVolume(volume, volume)
+                }
                 else -> Log.w(TAG, "Unknown action: ${it.action}")
             }
         } ?: Log.w(TAG, "Intent is null")
@@ -216,6 +249,8 @@ class MusicPlayerService : Service() {
         Log.d(TAG, "URL: $url")
         Log.d(TAG, "Title: $title, Artist: $artist, Album: $album")
         Log.d(TAG, "Current state - mediaPlayer: ${mediaPlayer != null}, isPrepared: $isPrepared, currentUrl: $currentUrl")
+
+        musicPlayerActive = true
 
         if (currentUrl == url && mediaPlayer != null && isPrepared) {
             Log.d(TAG, "Same URL already playing, resuming...")
@@ -359,10 +394,12 @@ class MusicPlayerService : Service() {
         mediaPlayer = null
         isPrepared = false
         currentUrl = null
-        Log.d(TAG, "State reset, stopping service")
+        musicPlayerActive = false
+        Log.d(TAG, "State reset, checking service lifetime")
         updatePlaybackState()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        updateNotification()
+        // Don't call stopSelf() directly - use updateServiceLifetime()
+        updateServiceLifetime()
     }
 
     private fun playNextTrack() {
@@ -398,6 +435,13 @@ class MusicPlayerService : Service() {
 
         val isPlaying = mediaPlayer?.isPlaying == true
 
+        // Determine title based on music state
+        val title = if (musicPlayerActive && mediaPlayer != null) {
+            description?.title ?: "Music Player"
+        } else {
+            "No song is playing"
+        }
+
         val playPauseAction = NotificationCompat.Action(
             if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
             if (isPlaying) "Pausar" else "Reproducir",
@@ -414,7 +458,7 @@ class MusicPlayerService : Service() {
             MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
         )
 
-        builder.setContentTitle(description?.title ?: "Music Player")
+        builder.setContentTitle(title)
             .setContentText(description?.subtitle ?: "")
             .setSubText(description?.description ?: "")
             .setContentIntent(controller.sessionActivity)

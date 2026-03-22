@@ -44,7 +44,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       commands::next,
       commands::previous,
       commands::seek,
-      commands::get_state
+      commands::get_state,
+      commands::start_service,
+      commands::stop_service,
+      commands::set_volume
     ])
     .setup(|app, api| {
       #[cfg(mobile)]

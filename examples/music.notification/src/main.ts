@@ -1,4 +1,4 @@
-import { play, pause, resume, stop, next, previous, seek, getState, startServer, type PlaybackState } from "music-notification-api";
+import { play, pause, resume, stop, next, previous, seek, getState, startService, stopService, setVolume, type PlaybackState } from "music-notification-api";
 
 // UI Elements
 const urlInput = document.querySelector("#urlInput") as HTMLInputElement;
@@ -14,12 +14,15 @@ const prevBtn = document.querySelector("#prevBtn") as HTMLButtonElement;
 const nextBtn = document.querySelector("#nextBtn") as HTMLButtonElement;
 const seekBtn = document.querySelector("#seekBtn") as HTMLButtonElement;
 const stateBtn = document.querySelector("#stateBtn") as HTMLButtonElement;
-const startServerBtn = document.querySelector("#startServerBtn") as HTMLButtonElement;
+const startServiceBtn = document.querySelector("#startServiceBtn") as HTMLButtonElement;
+const stopServiceBtn = document.querySelector("#stopServiceBtn") as HTMLButtonElement;
 
 const isPlayingEl = document.querySelector("#isPlaying") as HTMLElement;
 const positionEl = document.querySelector("#position") as HTMLElement;
 const durationEl = document.querySelector("#duration") as HTMLElement;
 const logOutput = document.querySelector("#logOutput") as HTMLElement;
+const volumeSlider = document.querySelector("#volumeSlider") as HTMLInputElement;
+const volumeValue = document.querySelector("#volumeValue") as HTMLElement;
 
 // Default values
 const DEFAULT_URL = "http://localhost:2080/api/music/id/42";
@@ -142,17 +145,31 @@ stateBtn.addEventListener("click", async () => {
   }
 });
 
-startServerBtn.addEventListener("click", async () => {
-  log("Starting HTTP server on port 2090...");
+startServiceBtn.addEventListener("click", async () => {
+  log("Starting service (HTTP server)...");
   try {
-    const result = await startServer();
+    const result = await startService();
     if (result.success) {
-      log("✓ Server started - check http://localhost:2090");
+      log("✓ Service started - HTTP server running on port 2090");
     } else {
-      log("✗ Server failed to start", true);
+      log(`✗ Service failed: ${result.message}`, true);
     }
   } catch (e) {
-    log(`✗ Start server error: ${e}`, true);
+    log(`✗ Start service error: ${e}`, true);
+  }
+});
+
+stopServiceBtn.addEventListener("click", async () => {
+  log("Stopping service...");
+  try {
+    const result = await stopService();
+    if (result.success) {
+      log("✓ Service stop requested");
+    } else {
+      log(`✗ Stop failed: ${result.message}`, true);
+    }
+  } catch (e) {
+    log(`✗ Stop service error: ${e}`, true);
   }
 });
 
@@ -165,6 +182,26 @@ setInterval(async () => {
     // Ignore errors for background state updates
   }
 }, 2000);
+
+// Volume Control
+volumeSlider.addEventListener("input", (e) => {
+  const target = e.target as HTMLInputElement;
+  volumeValue.textContent = `${target.value}%`;
+});
+
+volumeSlider.addEventListener("change", async () => {
+  const volume = parseFloat(volumeSlider.value) / 100;
+  try {
+    const result = await setVolume({ volume });
+    if (result.success) {
+      log(`✓ Volume set to ${Math.round(volume * 100)}%`);
+    } else {
+      log(`✗ Volume failed: ${result.message || "Unknown error"}`, true);
+    }
+  } catch (e) {
+    log(`✗ Volume error: ${e}`, true);
+  }
+});
 
 // Initial log
 log("Music Notification Plugin loaded");
