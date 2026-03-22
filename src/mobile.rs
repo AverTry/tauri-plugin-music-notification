@@ -1,6 +1,4 @@
 use serde::de::DeserializeOwned;
-use std::sync::Mutex;
-use std::thread;
 use tauri::{
   plugin::{PluginApi, PluginHandle},
   AppHandle, Runtime,
@@ -8,17 +6,11 @@ use tauri::{
 
 use crate::models::*;
 
-type ServerStarter = Box<dyn FnOnce() -> std::io::Result<()> + Send>;
-
-pub struct MusicNotificationState {
-  pub server_starter: Mutex<Option<ServerStarter>>,
-}
+pub struct MusicNotificationState;
 
 impl Default for MusicNotificationState {
   fn default() -> Self {
-    Self {
-      server_starter: Mutex::new(None),
-    }
+    Self
   }
 }
 
@@ -106,30 +98,5 @@ impl<R: Runtime> MusicNotification<R> {
       .0
       .run_mobile_plugin("getState", EmptyRequest {})
       .map_err(Into::into)
-  }
-
-  pub fn start_server(&self) -> crate::Result<EmptyResponse> {
-    let mut starter = self.1.server_starter.lock().unwrap();
-    if let Some(f) = starter.take() {
-      thread::spawn(move || {
-        if let Err(e) = f() {
-          eprintln!("Server error: {}", e);
-        }
-      });
-      Ok(EmptyResponse { success: true })
-    } else {
-      Err(crate::Error::Io(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        "No server starter registered",
-      )))
-    }
-  }
-
-  pub fn set_server_starter<F>(&self, f: F)
-  where
-    F: FnOnce() -> std::io::Result<()> + Send + 'static,
-  {
-    let mut starter = self.1.server_starter.lock().unwrap();
-    *starter = Some(Box::new(f));
   }
 }

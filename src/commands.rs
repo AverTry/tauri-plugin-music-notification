@@ -69,10 +69,3 @@ pub(crate) async fn get_state<R: Runtime>(
 ) -> Result<PlaybackState> {
     app.music_notification().get_state()
 }
-
-#[command]
-pub(crate) async fn start_server<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<EmptyResponse> {
-    app.music_notification().start_server()
-}

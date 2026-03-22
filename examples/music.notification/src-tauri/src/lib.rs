@@ -187,15 +187,6 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![greet])
         .plugin(tauri_plugin_music_notification_api::init())
-        .setup(|app| {
-            // Register the server starter function
-            #[cfg(target_os = "android")]
-            app.music_notification().set_server_starter(|| run_http_server());
-
-            #[cfg(not(target_os = "android"))]
-            app.music_notification().set_server_starter(start_http_server);
-            Ok(())
-        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

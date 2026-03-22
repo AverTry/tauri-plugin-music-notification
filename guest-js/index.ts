@@ -56,7 +56,3 @@ export async function seek(position: number): Promise<{ success: boolean }> {
 export async function getState(): Promise<PlaybackState> {
   return await invoke<PlaybackState>('plugin:music-notification|get_state');
 }
-
-export async function startServer(): Promise<{ success: boolean }> {
-  return await invoke<{ success: boolean }>('plugin:music-notification|start_server');
-}
