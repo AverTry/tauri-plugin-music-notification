@@ -12,6 +12,7 @@ A Tauri plugin for Android that provides music playback notifications with media
 - 📊 Get current playback state
 - 🔔 Native Android media notification with controls
 - 🎨 Lock screen controls support
+- 🌐 HTTP Server integration via trait-based API
 
 ## Installation
 
@@ -54,6 +55,80 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 ```
+
+### Android - HTTP Server Integration
+
+The plugin provides a `Server` trait that allows your app to run an HTTP server on Android. The server is automatically started when the music player service starts.
+
+#### 1. Implement the Server Trait
+
+In your `src-tauri/src/lib.rs`, implement the `Server` trait:
+
+```rust
+use std::sync::Arc;
+use tauri_plugin_music_notification_api::Server;
+
+struct HttpServer;
+
+impl Server for HttpServer {
+    fn start(self: Arc<Self>) -> Result<(), String> {
+        // Start your HTTP server here
+        println!("HTTP Server starting...");
+        Ok(())
+    }
+
+    fn stop(self: Arc<Self>) -> Result<(), String> {
+        // Stop your HTTP server here
+        println!("HTTP Server stopping...");
+        Ok(())
+    }
+
+    fn is_running(self: Arc<Self>) -> bool {
+        // Return whether the server is running
+        true
+    }
+}
+```
+
+#### 2. Register Your Server
+
+Register your server implementation early in your app initialization:
+
+```rust
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    // Register the server before starting the app
+    tauri_plugin_music_notification_api::set_server(Arc::new(HttpServer));
+
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![...])
+        .plugin(tauri_plugin_music_notification_api::init())
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+```
+
+#### 3. Set Your Library Name (Optional)
+
+By default, the plugin looks for a library named `musicnotification_lib`. If your library has a different name, you can set it via TypeScript:
+
+```typescript
+import { setServer } from 'music-notification-api';
+
+await setServer({ libraryName: 'your_library_name' });
+```
+
+Alternatively, you can set it in `build.rs` to emit the library name automatically:
+
+```rust
+// src-tauri/build.rs
+fn main() {
+    tauri_build::build();
+    println!("cargo:rustc-env=COMPILED_LIB_NAME=your_library_name");
+}
+```
+
+The plugin will automatically emit an event on startup with this library name.
 
 ### Permissions
 
