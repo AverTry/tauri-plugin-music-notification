@@ -97,46 +97,6 @@ pub fn get_server() -> Option<Arc<dyn Server>> {
 
 /// Android log binding for server functions
 #[cfg(target_os = "android")]
-mod server_log {
-  pub enum LogPriority {
-    Info = 4,
-    Error = 6,
-  }
-
-  extern "C" {
-    #[link_name = "__android_log_print"]
-    pub fn __android_log_print(prio: LogPriority, tag: *const i8, msg: *const i8) -> i32;
-  }
-}
-
-#[cfg(target_os = "android")]
-fn server_log_info(msg: &str) {
-  use std::ffi::CString;
-  let tag = CString::new("ServerTrait").unwrap();
-  let msg = CString::new(msg).unwrap();
-  unsafe {
-    server_log::__android_log_print(
-      server_log::LogPriority::Info,
-      tag.as_ptr() as *const i8,
-      msg.as_ptr() as *const i8,
-    );
-  }
-}
-
-#[cfg(target_os = "android")]
-fn server_log_error(msg: &str) {
-  use std::ffi::CString;
-  let tag = CString::new("ServerTrait").unwrap();
-  let msg = CString::new(msg).unwrap();
-  unsafe {
-    server_log::__android_log_print(
-      server_log::LogPriority::Error,
-      tag.as_ptr() as *const i8,
-      msg.as_ptr() as *const i8,
-    );
-  }
-}
-
 /// Call start on the registered server (called from JNI wrapper)
 #[no_mangle]
 pub extern "C" fn server_start() -> i32 {
@@ -144,17 +104,14 @@ pub extern "C" fn server_start() -> i32 {
   {
     if let Some(server) = get_server() {
       match server.start() {
-        Ok(()) => {
-          server_log_info("server_start: Server started successfully");
-          0
-        }
+        Ok(()) => 0,
         Err(e) => {
-          server_log_error(&format!("server_start failed: {}", e));
+          eprintln!("server_start failed: {}", e);
           -1
         }
       }
     } else {
-      server_log_error("server_start: No server registered");
+      eprintln!("server_start: No server registered");
       -1
     }
   }
@@ -172,17 +129,14 @@ pub extern "C" fn server_stop() -> i32 {
   {
     if let Some(server) = get_server() {
       match server.stop() {
-        Ok(()) => {
-          server_log_info("server_stop: Server stopped successfully");
-          0
-        }
+        Ok(()) => 0,
         Err(e) => {
-          server_log_error(&format!("server_stop failed: {}", e));
+          eprintln!("server_stop failed: {}", e);
           -1
         }
       }
     } else {
-      server_log_error("server_stop: No server registered");
+      eprintln!("server_stop: No server registered");
       -1
     }
   }
