@@ -17,7 +17,10 @@ mod models;
 pub use error::{Error, Result};
 
 // Re-export Server trait and registration functions for example apps
-pub use models::{Server, set_server, server_start, server_stop};
+pub use models::{Server, set_server};
+
+#[cfg(target_os = "android")]
+pub use models::{server_start, server_stop};
 
 #[cfg(desktop)]
 use desktop::MusicNotification;

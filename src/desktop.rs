@@ -68,16 +68,24 @@ impl<R: Runtime> MusicNotification<R> {
   }
 
   pub fn start_service(&self) -> crate::Result<EmptyResponse> {
-    Ok(EmptyResponse {
-      success: false,
-      message: Some("Service control only available on mobile".to_string()),
-    })
+    Ok(EmptyResponse { success: false })
   }
 
   pub fn stop_service(&self) -> crate::Result<EmptyResponse> {
-    Ok(EmptyResponse {
+    Ok(EmptyResponse { success: false })
+  }
+
+  pub fn set_volume(&self, _payload: SetVolumeRequest) -> crate::Result<SetVolumeResponse> {
+    Ok(SetVolumeResponse {
       success: false,
-      message: Some("Service control only available on mobile".to_string()),
+      message: Some("Volume control only available on mobile".to_string()),
+    })
+  }
+
+  pub fn set_server(&self, _library_name: String) -> crate::Result<SetServerResponse> {
+    Ok(SetServerResponse {
+      success: false,
+      message: Some("Server registration only available on mobile".to_string()),
     })
   }
 }
