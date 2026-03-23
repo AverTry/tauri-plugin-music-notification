@@ -44,13 +44,18 @@ class MusicPlayerService : Service() {
         private val tracks = mutableListOf<TrackInfo>()
         private var currentTrackIndex = 0
 
-        // Native library loader - tries to load from app classpath
-        fun loadNativeLibrary(context: Context) {
+        // Server library loader - uses the Server trait's registered library name
+        fun loadServerLibrary(context: Context): String? {
+            // Get registered server library name from plugin's SharedPreferences
+            val libName = MusicNotificationPlugin.getServerLibName(context)
+                ?: "musicnotification_lib"  // fallback to default
+
             try {
-                System.loadLibrary("musicnotification_lib")
-                Log.d(TAG, "Native library musicnotification_lib loaded successfully")
+                System.loadLibrary(libName)
+                Log.d(TAG, "Server library $libName loaded successfully")
+                return libName
             } catch (e: UnsatisfiedLinkError) {
-                Log.e(TAG, "Failed to load native library: ${e.message}")
+                Log.e(TAG, "Failed to load server library $libName: ${e.message}")
                 // Try loading using the app's classloader
                 try {
                     val appClassLoader = context.applicationContext.classLoader
@@ -59,17 +64,22 @@ class MusicPlayerService : Service() {
                         String::class.java,
                         ClassLoader::class.java
                     )
-                    loadLibraryMethod.invoke(null, "musicnotification_lib", appClassLoader)
-                    Log.d(TAG, "Native library loaded via app classloader")
+                    loadLibraryMethod.invoke(null, libName, appClassLoader)
+                    Log.d(TAG, "Server library $libName loaded via app classloader")
+                    return libName
                 } catch (ex: Exception) {
-                    Log.e(TAG, "Failed to load native library via classloader: ${ex.message}")
+                    Log.e(TAG, "Failed to load server library $libName via classloader: ${ex.message}")
+                    return null
                 }
             }
         }
     }
 
-    // Declare the native Rust function that starts the HTTP server (instance method)
-    private external fun startHttpServer()
+    // Declare the well-known native Rust functions for Server trait
+    // These are exported by the plugin and call the registered trait implementation
+    // Note: JNI mangles underscores, so we use camelCase here
+    private external fun serverStart(): Int
+    private external fun serverStop(): Int
 
     // State tracking for service lifetime management
     private var httpServerRunning = false
@@ -154,17 +164,17 @@ class MusicPlayerService : Service() {
             }
         }
 
-        // Load the native library that contains the HTTP server
-        loadNativeLibrary(this)
+        // Load the server library that contains the Server trait implementation
+        loadServerLibrary(this)
 
-        // Start the Rust HTTP server - this will run in the background
-        Log.d(TAG, "Starting Rust HTTP server...")
-        try {
-            startHttpServer()
+        // Start the server via well-known JNI function
+        Log.d(TAG, "Starting server via serverStart()...")
+        val result = serverStart()
+        if (result == 0) {
             httpServerRunning = true
-            Log.d(TAG, "Rust HTTP server started, service lifetime tied to server")
-        } catch (e: UnsatisfiedLinkError) {
-            Log.e(TAG, "Failed to call startHttpServer: ${e.message}")
+            Log.d(TAG, "Server started successfully, service lifetime tied to server")
+        } else {
+            Log.e(TAG, "Failed to start server, code: $result")
         }
 
         Log.d(TAG, "onCreate complete")
@@ -185,6 +195,14 @@ class MusicPlayerService : Service() {
                 }
                 ACTION_STOP_SERVICE -> {
                     Log.d(TAG, "Action: STOP_SERVICE")
+                    // Stop the server via well-known JNI function
+                    Log.d(TAG, "Stopping server via serverStop()...")
+                    val result = serverStop()
+                    if (result == 0) {
+                        Log.d(TAG, "Server stopped successfully")
+                    } else {
+                        Log.e(TAG, "Failed to stop server, code: $result")
+                    }
                     httpServerRunning = false
                     updateServiceLifetime()
                 }

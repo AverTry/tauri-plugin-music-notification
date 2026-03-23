@@ -1,8 +1,10 @@
 package com.plugin.music_notification
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -33,8 +35,24 @@ class SetVolumeArgs {
   var volume: Float = 0.5f
 }
 
+@InvokeArg
+class SetServerArgs {
+  var libraryName: String? = null
+}
+
 @TauriPlugin
 class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) {
+
+    companion object {
+        private const val TAG = "MusicNotificationPlugin"
+        private const val PREFS_NAME = "music_notification"
+        private const val PREF_SERVER_LIB_NAME = "server_lib_name"
+
+        fun getServerLibName(context: Context): String? {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return prefs.getString(PREF_SERVER_LIB_NAME, null)
+        }
+    }
 
     @Command
     fun ping(invoke: Invoke) {
@@ -48,7 +66,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
     fun play(invoke: Invoke) {
         try {
             val args = invoke.parseArgs(PlayArgs::class.java)
-            
+
             if (args.url.isEmpty()) {
                 val ret = JSObject()
                 ret.put("success", false)
@@ -285,5 +303,38 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
             invoke.resolve(ret)
         }
     }
-}
 
+    @Command
+    fun setServer(invoke: Invoke) {
+        try {
+            val args = invoke.parseArgs(SetServerArgs::class.java)
+
+            if (args.libraryName == null) {
+                val ret = JSObject()
+                ret.put("success", false)
+                ret.put("message", "libraryName is required")
+                invoke.resolve(ret)
+                return
+            }
+
+            // Store the server library name in SharedPreferences
+            val prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString(PREF_SERVER_LIB_NAME, args.libraryName)
+                .apply()
+
+            Log.d(TAG, "Server library registered: ${args.libraryName}")
+
+            val ret = JSObject()
+            ret.put("success", true)
+            ret.put("message", "Server library registered")
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register server library: ${e.message}")
+            val ret = JSObject()
+            ret.put("success", false)
+            ret.put("message", e.message)
+            invoke.resolve(ret)
+        }
+    }
+}

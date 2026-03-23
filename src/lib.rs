@@ -16,6 +16,9 @@ mod models;
 
 pub use error::{Error, Result};
 
+// Re-export Server trait and registration functions for example apps
+pub use models::{Server, set_server, server_start, server_stop};
+
 #[cfg(desktop)]
 use desktop::MusicNotification;
 #[cfg(mobile)]
@@ -47,7 +50,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       commands::get_state,
       commands::start_service,
       commands::stop_service,
-      commands::set_volume
+      commands::set_volume,
+      commands::set_server
     ])
     .setup(|app, api| {
       #[cfg(mobile)]

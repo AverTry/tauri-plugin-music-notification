@@ -91,3 +91,11 @@ pub(crate) async fn set_volume<R: Runtime>(
 ) -> Result<SetVolumeResponse> {
     app.music_notification().set_volume(payload)
 }
+
+#[command]
+pub(crate) async fn set_server<R: Runtime>(
+    app: AppHandle<R>,
+    library_name: String,
+) -> Result<SetServerResponse> {
+    app.music_notification().set_server(library_name)
+}

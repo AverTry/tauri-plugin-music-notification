@@ -16,6 +16,7 @@ Default permissions for the plugin
 - `allow-start-service`
 - `allow-stop-service`
 - `allow-set-volume`
+- `allow-set-server`
 
 ## Permission Table
 
@@ -230,6 +231,32 @@ Enables the seek command without any pre-configured scope.
 <td>
 
 Denies the seek command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-set-server`
+
+</td>
+<td>
+
+Enables the set_server command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-set-server`
+
+</td>
+<td>
+
+Denies the set_server command without any pre-configured scope.
 
 </td>
 </tr>

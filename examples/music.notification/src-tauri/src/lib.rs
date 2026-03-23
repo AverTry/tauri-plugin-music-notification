@@ -1,11 +1,11 @@
 use tauri::Manager;
-use tauri_plugin_music_notification_api::MusicNotificationExt;
+use tauri::Emitter;
+use tauri_plugin_music_notification_api::{MusicNotificationExt, Server, set_server};
 use std::ffi::CString;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-
-// Global flag to track if server is running
-static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
+use std::sync::{mpsc, Arc};
+use std::thread;
+use std::time::Duration;
 
 // Android log binding
 #[cfg(target_os = "android")]
@@ -47,19 +47,47 @@ fn log_error(msg: &str) {
     }
 }
 
-// HTTP server that runs in a background thread
-// Exported as extern "C" for FFI/setter pattern
-#[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn run_http_server() -> std::io::Result<()> {
-    run_http_server_impl();
-    Ok(())
+// HTTP server implementation that implements the Server trait
+struct HttpServer {
+    running: Arc<AtomicBool>,
 }
 
+impl Server for HttpServer {
+    fn start(self: Arc<Self>) -> Result<(), String> {
+        if self.running.load(Ordering::Relaxed) {
+            log_info("Server already running, skipping start");
+            return Ok(());
+        }
+
+        self.running.store(true, Ordering::Relaxed);
+        log_info("Server trait: Starting HTTP server");
+        run_http_server_impl();
+        Ok(())
+    }
+
+    fn stop(self: Arc<Self>) -> Result<(), String> {
+        self.running.store(false, Ordering::Relaxed);
+        log_info("Server trait: Stopping HTTP server");
+        stop_http_server_impl();
+        Ok(())
+    }
+
+    fn is_running(self: Arc<Self>) -> bool {
+        self.running.load(Ordering::Relaxed)
+    }
+}
+
+// HTTP server implementation
 #[cfg(target_os = "android")]
 fn run_http_server_impl() {
     use std::thread;
-    use std::time::Duration;
+
+    let (tx, rx) = mpsc::channel();
+
+    // Store the sender globally so we can signal stop later
+    unsafe {
+        SERVER_STOP_TX = Some(tx);
+    }
 
     thread::spawn(move || {
         log_info("HTTP server thread started, binding to port 2090...");
@@ -77,11 +105,30 @@ fn run_http_server_impl() {
 
         log_info("HTTP server ready to accept requests on port 2090");
 
-        for request in server.incoming_requests() {
-            let url = request.url().to_string();
-            let response = match request.url() {
-                "/" => {
-                    let html = r#"
+        // Server loop with periodic stop checks
+        'server_loop: loop {
+            // Check for stop signal first (non-blocking)
+            match rx.try_recv() {
+                Ok(_) | Err(mpsc::TryRecvError::Disconnected) => {
+                    log_info("Received stop signal, shutting down HTTP server");
+                    break 'server_loop;
+                }
+                Err(mpsc::TryRecvError::Empty) => {
+                    // Continue - process requests
+                }
+            }
+
+            // Process requests with a timeout check
+            // Since incoming_requests() blocks, we use recv_timeout on the channel
+            // to wake up periodically and check if we should stop
+            let deadline = std::time::Instant::now() + Duration::from_millis(100);
+            let mut processed = false;
+
+            for request in server.incoming_requests() {
+                let url = request.url().to_string();
+                let response = match request.url() {
+                    "/" => {
+                        let html = r#"
 <!DOCTYPE html>
 <html>
 <head><title>Music Player Server</title></head>
@@ -91,18 +138,51 @@ fn run_http_server_impl() {
     <p>Running in foreground service</p>
 </body>
 </html>
-                    "#;
-                    tiny_http::Response::from_string(html)
-                        .with_header(
-                            tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/html"[..]).unwrap()
-                        )
+                        "#;
+                        tiny_http::Response::from_string(html)
+                            .with_header(
+                                tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/html"[..]).unwrap()
+                            )
+                    }
+                    _ => tiny_http::Response::from_string("Not Found").with_status_code(404),
+                };
+                let _ = request.respond(response);
+                log_info(&format!("Served: {}", url));
+
+                // Only process one request per cycle, then check for stop
+                processed = true;
+
+                // Check time to avoid blocking too long
+                if std::time::Instant::now() > deadline {
+                    break;
                 }
-                _ => tiny_http::Response::from_string("Not Found").with_status_code(404),
-            };
-            let _ = request.respond(response);
-            log_info(&format!("Served: {}", url));
+            }
+
+            // If we didn't process any request, sleep a bit to avoid busy-waiting
+            if !processed {
+                thread::sleep(Duration::from_millis(50));
+            }
         }
+
+        log_info("HTTP server thread exited");
     });
+}
+
+// Global channel sender for stopping the server
+#[cfg(target_os = "android")]
+static mut SERVER_STOP_TX: Option<mpsc::Sender<()>> = None;
+
+// Function to stop the HTTP server
+#[cfg(target_os = "android")]
+fn stop_http_server_impl() {
+    unsafe {
+        if let Some(tx) = &SERVER_STOP_TX {
+            log_info("Sending stop signal to HTTP server");
+            let _ = tx.send(());
+        } else {
+            log_info("No HTTP server running to stop");
+        }
+    }
 }
 
 // JNI-exported hello world function for testing Rust-to-Kotlin integration
@@ -125,24 +205,28 @@ pub extern "C" fn Java_com_example_music_1notification_MainActivity_rustHelloWor
     };
 }
 
-// JNI-exported function to start the HTTP server from Kotlin/Android service
-// Note: For instance methods in Kotlin, we use jobject instead of JClass
-// Note: Package name "music_notification" gets mangled to "music_1notification" in JNI
+// JNI wrapper functions for the Server trait approach
+// These must be exported from the example app's library for Kotlin to find
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "C" fn Java_com_plugin_music_1notification_MusicPlayerService_startHttpServer(
-    mut env: jni::JNIEnv,
+pub extern "C" fn Java_com_plugin_music_1notification_MusicPlayerService_serverStart(
+    _env: jni::JNIEnv,
     _this: jni::objects::JObject,
-) {
-    log_info("startHttpServer called from MusicPlayerService instance");
+) -> i32 {
+    log_info("serverStart JNI wrapper called (example app -> plugin)");
+    // Call the plugin's server_start which will invoke the registered trait implementation
+    tauri_plugin_music_notification_api::server_start()
+}
 
-    if SERVER_RUNNING.load(Ordering::Relaxed) {
-        log_info("Server already running, skipping");
-        return;
-    }
-
-    SERVER_RUNNING.store(true, Ordering::Relaxed);
-    run_http_server();
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "C" fn Java_com_plugin_music_1notification_MusicPlayerService_serverStop(
+    _env: jni::JNIEnv,
+    _this: jni::objects::JObject,
+) -> i32 {
+    log_info("serverStop JNI wrapper called (example app -> plugin)");
+    // Call the plugin's server_stop which will invoke the registered trait implementation
+    tauri_plugin_music_notification_api::server_stop()
 }
 
 // Learn more about Tauri commands at https://v2.tauri.app/develop/calling-rust/
@@ -184,9 +268,30 @@ fn start_http_server() -> std::io::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Register the HTTP server implementation with the plugin
+    let http_server = HttpServer {
+        running: Arc::new(AtomicBool::new(false)),
+    };
+    set_server(Arc::new(http_server));
+    log_info("Registered HttpServer with plugin");
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![greet])
         .plugin(tauri_plugin_music_notification_api::init())
+        .setup(|app| {
+            // Auto-register the server library name on startup
+            // This eliminates the need for TypeScript to know the library name
+            let lib_name = env!("COMPILED_LIB_NAME");
+
+            #[cfg(target_os = "android")]
+            log_info(&format!("Auto-emitting server library name: {}", lib_name));
+
+            // Emit an event that the frontend will listen to
+            // The event handler will call setServer with this library name
+            let _ = app.emit("server_library_name", lib_name);
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

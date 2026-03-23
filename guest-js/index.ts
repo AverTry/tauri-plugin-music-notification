@@ -74,3 +74,12 @@ export async function setVolume(options: SetVolumeOptions): Promise<{ success: b
     payload: options,
   });
 }
+
+export async function setServer(libraryName: string): Promise<{ success: boolean; message?: string }> {
+  return await invoke<{ success: boolean; message?: string }>(
+    'plugin:music-notification|set_server',
+    {
+      libraryName,
+    }
+  );
+}

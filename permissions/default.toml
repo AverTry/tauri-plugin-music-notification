@@ -12,5 +12,6 @@ permissions = [
   "allow-get-state",
   "allow-start-service",
   "allow-stop-service",
-  "allow-set-volume"
+  "allow-set-volume",
+  "allow-set-server"
 ]

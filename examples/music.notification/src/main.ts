@@ -1,4 +1,27 @@
-import { play, pause, resume, stop, next, previous, seek, getState, startService, stopService, setVolume, type PlaybackState } from "music-notification-api";
+import { play, pause, resume, stop, next, previous, seek, getState, startService, stopService, setVolume, setServer, type PlaybackState } from "music-notification-api";
+import { listen } from "@tauri-apps/api/event";
+
+// Auto-register server when Rust emits the library name event
+// This eliminates the need to hardcode the library name in TypeScript
+async function autoRegisterServer() {
+  const unlisten = await listen<string>("server_library_name", async (event) => {
+    const libraryName = event.payload;
+    console.log("Auto-registering server with library name from Rust:", libraryName);
+
+    try {
+      const result = await setServer(libraryName);
+      console.log("Registered HTTP server:", result);
+    } catch (e) {
+      console.error("Failed to register server:", e);
+    }
+  });
+
+  // Keep the listener active
+  return unlisten;
+}
+
+// Start auto-registration on app startup
+autoRegisterServer();
 
 // UI Elements
 const urlInput = document.querySelector("#urlInput") as HTMLInputElement;
