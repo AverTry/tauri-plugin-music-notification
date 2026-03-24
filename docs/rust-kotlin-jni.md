@@ -2,6 +2,11 @@
 
 This document explains how to call Rust functions from Kotlin in a Tauri Android app using JNI.
 
+> **Current plugin design:** the plugin now owns the fixed
+> `MusicPlayerService_serverStart` / `MusicPlayerService_serverStop` JNI exports.
+> App code should implement the Rust `Server` trait and register it with
+> `set_server(...)`; app code no longer needs to define those JNI wrappers itself.
+
 ## Overview
 
 In this plugin, Rust HTTP server code runs in the foreground service to persist when the app goes to background. The communication flow is:
@@ -23,8 +28,9 @@ In this plugin, Rust HTTP server code runs in the foreground service to persist 
 
 1. **Frontend**: User clicks play button → calls `invoke('plugin:music-notification|play')`
 2. **Plugin (Kotlin)**: `play()` command starts `MusicPlayerService` (foreground service)
-3. **Service (Kotlin)**: `onCreate()` loads native library and calls Rust function via JNI
-4. **Rust**: HTTP server starts on port 2090 in a background thread
+3. **Service (Kotlin)**: `onCreate()` loads the app native library and calls the plugin JNI symbol
+4. **Plugin (Rust)**: JNI forwards to the registered `Server` trait object
+5. **Rust App Server**: HTTP server starts on port 2090 in a background thread
 
 ### Module Layout
 

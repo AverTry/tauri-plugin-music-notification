@@ -1,6 +1,4 @@
-use tauri::Manager;
-use tauri::Emitter;
-use tauri_plugin_music_notification_api::{MusicNotificationExt, Server, set_server};
+use tauri_plugin_music_notification_api::{Server, set_server};
 use std::ffi::CString;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
@@ -53,6 +51,10 @@ struct HttpServer {
 }
 
 impl Server for HttpServer {
+    fn library_name(&self) -> &str {
+        "musicnotification_lib"
+    }
+
     fn start(self: Arc<Self>) -> Result<(), String> {
         if self.running.load(Ordering::Relaxed) {
             log_info("Server already running, skipping start");
@@ -205,30 +207,6 @@ pub extern "C" fn Java_com_example_music_1notification_MainActivity_rustHelloWor
     };
 }
 
-// JNI wrapper functions for the Server trait approach
-// These must be exported from the example app's library for Kotlin to find
-#[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn Java_com_plugin_music_1notification_MusicPlayerService_serverStart(
-    _env: jni::JNIEnv,
-    _this: jni::objects::JObject,
-) -> i32 {
-    log_info("serverStart JNI wrapper called (example app -> plugin)");
-    // Call the plugin's server_start which will invoke the registered trait implementation
-    tauri_plugin_music_notification_api::server_start()
-}
-
-#[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn Java_com_plugin_music_1notification_MusicPlayerService_serverStop(
-    _env: jni::JNIEnv,
-    _this: jni::objects::JObject,
-) -> i32 {
-    log_info("serverStop JNI wrapper called (example app -> plugin)");
-    // Call the plugin's server_stop which will invoke the registered trait implementation
-    tauri_plugin_music_notification_api::server_stop()
-}
-
 // Learn more about Tauri commands at https://v2.tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -279,17 +257,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![greet])
         .plugin(tauri_plugin_music_notification_api::init())
         .setup(|app| {
-            // Auto-register the server library name on startup
-            // This eliminates the need for TypeScript to know the library name
-            let lib_name = env!("COMPILED_LIB_NAME");
-
-            #[cfg(target_os = "android")]
-            log_info(&format!("Auto-emitting server library name: {}", lib_name));
-
-            // Emit an event that the frontend will listen to
-            // The event handler will call setServer with this library name
-            let _ = app.emit("server_library_name", lib_name);
-
             Ok(())
         })
         .run(tauri::generate_context!())

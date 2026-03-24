@@ -71,6 +71,10 @@ use tauri_plugin_music_notification_api::Server;
 struct HttpServer;
 
 impl Server for HttpServer {
+    fn library_name(&self) -> &str {
+        "app_lib"
+    }
+
     fn start(self: Arc<Self>) -> Result<(), String> {
         // Start your HTTP server here
         println!("HTTP Server starting...");
@@ -92,12 +96,13 @@ impl Server for HttpServer {
 
 #### 2. Register Your Server
 
-Register your server implementation early in your app initialization:
+Register your server implementation before installing the plugin:
 
 ```rust
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Register the server before starting the app
+    // Register the server before installing the plugin so Android can
+    // auto-register the correct native library name for the foreground service.
     tauri_plugin_music_notification_api::set_server(Arc::new(HttpServer));
 
     tauri::Builder::default()
@@ -108,27 +113,16 @@ pub fn run() {
 }
 ```
 
-#### 3. Set Your Library Name (Optional)
+#### 3. No Manual JNI or Frontend Library Registration Needed
 
-By default, the plugin looks for a library named `musicnotification_lib`. If your library has a different name, you can set it via TypeScript:
+The plugin now exports the fixed Android JNI symbols itself and reads the native
+library name from `Server::library_name()`. That means:
 
-```typescript
-import { setServer } from 'music-notification-api';
+- you do **not** need to write JNI wrappers in your app
+- you do **not** need to call `setServer(...)` from JavaScript just to start the server
 
-await setServer({ libraryName: 'your_library_name' });
-```
-
-Alternatively, you can set it in `build.rs` to emit the library name automatically:
-
-```rust
-// src-tauri/build.rs
-fn main() {
-    tauri_build::build();
-    println!("cargo:rustc-env=COMPILED_LIB_NAME=your_library_name");
-}
-```
-
-The plugin will automatically emit an event on startup with this library name.
+The optional `setServer(...)` JavaScript API still exists for advanced/manual flows,
+but normal Rust `Server` registration is enough.
 
 ### Permissions
 

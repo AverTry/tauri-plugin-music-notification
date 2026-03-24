@@ -9,10 +9,14 @@ repository = "https://github.com/VMASPAD/tauri-plugin-music-notification"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
 links = "music-notification"
 license = "MIT"
+
 [dependencies]
 tauri = { version = "2.9.1" }
 serde = "1.0"
 thiserror = "2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
 
 [build-dependencies]
 tauri-plugin = { version = "2.5.1", features = ["build"] }

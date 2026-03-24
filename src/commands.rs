@@ -1,8 +1,8 @@
-use tauri::{AppHandle, command, Runtime};
+use tauri::{command, AppHandle, Runtime};
 
 use crate::models::*;
-use crate::Result;
 use crate::MusicNotificationExt;
+use crate::Result;
 
 #[command]
 pub(crate) async fn ping<R: Runtime>(
@@ -21,66 +21,47 @@ pub(crate) async fn play<R: Runtime>(
 }
 
 #[command]
-pub(crate) async fn pause<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<EmptyResponse> {
+pub(crate) async fn pause<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
     app.music_notification().pause()
 }
 
 #[command]
-pub(crate) async fn resume<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<EmptyResponse> {
+pub(crate) async fn resume<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
     app.music_notification().resume()
 }
 
 #[command]
-pub(crate) async fn stop<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<EmptyResponse> {
+pub(crate) async fn stop<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
     app.music_notification().stop()
 }
 
 #[command]
-pub(crate) async fn next<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<EmptyResponse> {
+pub(crate) async fn next<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
     app.music_notification().next()
 }
 
 #[command]
-pub(crate) async fn previous<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<EmptyResponse> {
+pub(crate) async fn previous<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
     app.music_notification().previous()
 }
 
 #[command]
-pub(crate) async fn seek<R: Runtime>(
-    app: AppHandle<R>,
-    position: i64,
-) -> Result<EmptyResponse> {
+pub(crate) async fn seek<R: Runtime>(app: AppHandle<R>, position: i64) -> Result<EmptyResponse> {
     app.music_notification().seek(position)
 }
 
 #[command]
-pub(crate) async fn get_state<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<PlaybackState> {
+pub(crate) async fn get_state<R: Runtime>(app: AppHandle<R>) -> Result<PlaybackState> {
     app.music_notification().get_state()
 }
 
 #[command]
-pub(crate) async fn start_service<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<EmptyResponse> {
+pub(crate) async fn start_service<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
     app.music_notification().start_service()
 }
 
 #[command]
-pub(crate) async fn stop_service<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<EmptyResponse> {
+pub(crate) async fn stop_service<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
     app.music_notification().stop_service()
 }
 
