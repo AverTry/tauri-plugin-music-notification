@@ -70,6 +70,48 @@ impl<R: Runtime> MusicNotification<R> {
         })
     }
 
+    pub fn set_playing_queue(
+        &self,
+        _payload: SetPlayingQueueRequest,
+    ) -> crate::Result<QueueMutationResponse> {
+        Ok(QueueMutationResponse {
+            success: false,
+            message: Some("Android playback queue only available on mobile".to_string()),
+        })
+    }
+
+    pub fn get_playback_session(&self) -> crate::Result<PlaybackSession> {
+        Ok(PlaybackSession {
+            queue: PlayingQueue {
+                songs: Vec::new(),
+                current_index: None,
+            },
+            runtime: PlaybackRuntime {
+                is_playing: false,
+                position_ms: 0,
+                duration_ms: 0,
+            },
+            play_mode: PlayMode::Sequential,
+        })
+    }
+
+    pub fn clear_playing_queue(&self) -> crate::Result<QueueMutationResponse> {
+        Ok(QueueMutationResponse {
+            success: false,
+            message: Some("Android playback queue only available on mobile".to_string()),
+        })
+    }
+
+    pub fn set_play_mode(
+        &self,
+        _payload: SetPlayModeRequest,
+    ) -> crate::Result<QueueMutationResponse> {
+        Ok(QueueMutationResponse {
+            success: false,
+            message: Some("Android playback queue only available on mobile".to_string()),
+        })
+    }
+
     pub fn start_service(&self) -> crate::Result<EmptyResponse> {
         Ok(EmptyResponse { success: false })
     }

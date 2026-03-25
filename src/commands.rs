@@ -56,6 +56,36 @@ pub(crate) async fn get_state<R: Runtime>(app: AppHandle<R>) -> Result<PlaybackS
 }
 
 #[command]
+pub(crate) async fn set_playing_queue<R: Runtime>(
+    app: AppHandle<R>,
+    payload: SetPlayingQueueRequest,
+) -> Result<QueueMutationResponse> {
+    app.music_notification().set_playing_queue(payload)
+}
+
+#[command]
+pub(crate) async fn get_playback_session<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<PlaybackSession> {
+    app.music_notification().get_playback_session()
+}
+
+#[command]
+pub(crate) async fn clear_playing_queue<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<QueueMutationResponse> {
+    app.music_notification().clear_playing_queue()
+}
+
+#[command]
+pub(crate) async fn set_play_mode<R: Runtime>(
+    app: AppHandle<R>,
+    payload: SetPlayModeRequest,
+) -> Result<QueueMutationResponse> {
+    app.music_notification().set_play_mode(payload)
+}
+
+#[command]
 pub(crate) async fn start_service<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
     app.music_notification().start_service()
 }

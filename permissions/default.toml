@@ -13,5 +13,9 @@ permissions = [
   "allow-start-service",
   "allow-stop-service",
   "allow-set-volume",
-  "allow-set-server"
+  "allow-set-server",
+  "allow-set-playing-queue",
+  "allow-get-playback-session",
+  "allow-clear-playing-queue",
+  "allow-set-play-mode"
 ]

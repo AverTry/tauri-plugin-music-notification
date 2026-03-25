@@ -295,6 +295,30 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the clear_playing_queue command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-clear-playing-queue",
+          "markdownDescription": "Enables the clear_playing_queue command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the clear_playing_queue command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-clear-playing-queue",
+          "markdownDescription": "Denies the clear_playing_queue command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_playback_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-playback-session",
+          "markdownDescription": "Enables the get_playback_session command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_playback_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-playback-session",
+          "markdownDescription": "Denies the get_playback_session command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_state command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-state",
@@ -391,6 +415,30 @@
           "markdownDescription": "Denies the seek command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_play_mode command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-play-mode",
+          "markdownDescription": "Enables the set_play_mode command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_play_mode command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-play-mode",
+          "markdownDescription": "Denies the set_play_mode command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_playing_queue command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-playing-queue",
+          "markdownDescription": "Enables the set_playing_queue command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_playing_queue command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-playing-queue",
+          "markdownDescription": "Denies the set_playing_queue command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_server command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-server",
@@ -451,10 +499,10 @@
           "markdownDescription": "Denies the stop_service command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-play`\n- `allow-pause`\n- `allow-resume`\n- `allow-stop`\n- `allow-next`\n- `allow-previous`\n- `allow-seek`\n- `allow-get-state`\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-set-volume`\n- `allow-set-server`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-play`\n- `allow-pause`\n- `allow-resume`\n- `allow-stop`\n- `allow-next`\n- `allow-previous`\n- `allow-seek`\n- `allow-get-state`\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-set-volume`\n- `allow-set-server`\n- `allow-set-playing-queue`\n- `allow-get-playback-session`\n- `allow-clear-playing-queue`\n- `allow-set-play-mode`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-play`\n- `allow-pause`\n- `allow-resume`\n- `allow-stop`\n- `allow-next`\n- `allow-previous`\n- `allow-seek`\n- `allow-get-state`\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-set-volume`\n- `allow-set-server`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-play`\n- `allow-pause`\n- `allow-resume`\n- `allow-stop`\n- `allow-next`\n- `allow-previous`\n- `allow-seek`\n- `allow-get-state`\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-set-volume`\n- `allow-set-server`\n- `allow-set-playing-queue`\n- `allow-get-playback-session`\n- `allow-clear-playing-queue`\n- `allow-set-play-mode`"
         }
       ]
     }

@@ -11,6 +11,7 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import app.tauri.plugin.Invoke
+import org.json.JSONArray
 
 @InvokeArg
 class PingArgs {
@@ -38,6 +39,32 @@ class SetVolumeArgs {
 @InvokeArg
 class SetServerArgs {
   var libraryName: String? = null
+}
+
+@InvokeArg
+class QueueSongArgs {
+  var id: Long = -1L
+  var name: String = ""
+  var path: String = ""
+  var url: String = ""
+  var lufs: Double? = null
+}
+
+@InvokeArg
+class PlayingQueueArgs {
+  var songs: Array<QueueSongArgs> = emptyArray()
+  var currentIndex: Int? = null
+}
+
+@InvokeArg
+class SetPlayingQueueArgs {
+  var queue: PlayingQueueArgs = PlayingQueueArgs()
+  var playMode: String? = null
+}
+
+@InvokeArg
+class SetPlayModeArgs {
+  var playMode: String? = null
 }
 
 @TauriPlugin
@@ -158,6 +185,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
     @Command
     fun next(invoke: Invoke) {
         try {
+            Log.d(TAG, "Command next(): dispatching ACTION_NEXT to MusicPlayerService")
             val serviceIntent = Intent(activity, MusicPlayerService::class.java).apply {
                 action = MusicPlayerService.ACTION_NEXT
             }
@@ -176,6 +204,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
     @Command
     fun previous(invoke: Invoke) {
         try {
+            Log.d(TAG, "Command previous(): dispatching ACTION_PREVIOUS to MusicPlayerService")
             val serviceIntent = Intent(activity, MusicPlayerService::class.java).apply {
                 action = MusicPlayerService.ACTION_PREVIOUS
             }
@@ -195,6 +224,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
     fun seek(invoke: Invoke) {
         try {
             val args = invoke.parseArgs(SeekArgs::class.java)
+            Log.d(TAG, "Command seek(): dispatching ACTION_SEEK to position=${args.position}")
             val serviceIntent = Intent(activity, MusicPlayerService::class.java).apply {
                 action = MusicPlayerService.ACTION_SEEK
                 putExtra(MusicPlayerService.EXTRA_POSITION, args.position)
@@ -223,9 +253,10 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
                 ret.put("position", position)
                 ret.put("duration", duration)
             } else {
+                val snapshot = MusicPlayerService.loadPersistedSessionSnapshot(activity)
                 ret.put("isPlaying", false)
-                ret.put("position", 0)
-                ret.put("duration", 0)
+                ret.put("position", snapshot.runtime.positionMs)
+                ret.put("duration", snapshot.runtime.durationMs)
             }
 
             invoke.resolve(ret)
@@ -234,6 +265,144 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
             ret.put("isPlaying", false)
             ret.put("position", 0)
             ret.put("duration", 0)
+            invoke.resolve(ret)
+        }
+    }
+
+    @Command
+    fun setPlayingQueue(invoke: Invoke) {
+        try {
+            val args = invoke.parseArgs(SetPlayingQueueArgs::class.java)
+            val songs = args.queue.songs.map {
+                MusicPlayerService.QueueSongInfo(
+                    id = it.id,
+                    name = it.name,
+                    path = it.path,
+                    url = it.url,
+                    lufs = it.lufs
+                )
+            }
+            val playMode = args.playMode ?: "sequential"
+            val service = MusicPlayerService.instance
+
+            if (service != null) {
+                service.setPlayingQueue(songs, args.queue.currentIndex, playMode)
+            } else {
+                MusicPlayerService.savePersistedSessionSnapshot(
+                    activity,
+                    MusicPlayerService.SessionSnapshot(
+                        queue = MusicPlayerService.PlayingQueueSnapshot(songs, args.queue.currentIndex),
+                        runtime = MusicPlayerService.PlaybackRuntimeSnapshot(false, 0L, 0L),
+                        playMode = playMode
+                    )
+                )
+            }
+
+            val ret = JSObject()
+            ret.put("success", true)
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set playing queue", e)
+            val ret = JSObject()
+            ret.put("success", false)
+            ret.put("message", e.message)
+            invoke.resolve(ret)
+        }
+    }
+
+    @Command
+    fun getPlaybackSession(invoke: Invoke) {
+        try {
+            val snapshot = MusicPlayerService.instance?.getPlaybackSession()
+                ?: MusicPlayerService.loadPersistedSessionSnapshot(activity)
+
+            val ret = JSObject()
+            val queue = JSObject()
+            val songs = JSONArray()
+            snapshot.queue.songs.forEach { song ->
+                val songObj = JSObject()
+                songObj.put("id", song.id)
+                songObj.put("name", song.name)
+                songObj.put("path", song.path)
+                songObj.put("url", song.url)
+                songObj.put("lufs", song.lufs)
+                songs.put(songObj)
+            }
+            queue.put("songs", songs)
+            queue.put("currentIndex", snapshot.queue.currentIndex)
+
+            val runtime = JSObject()
+            runtime.put("isPlaying", snapshot.runtime.isPlaying)
+            runtime.put("positionMs", snapshot.runtime.positionMs)
+            runtime.put("durationMs", snapshot.runtime.durationMs)
+
+            ret.put("queue", queue)
+            ret.put("runtime", runtime)
+            ret.put("playMode", snapshot.playMode)
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get playback session", e)
+            val ret = JSObject()
+            ret.put("queue", JSObject().apply {
+                put("songs", JSONArray())
+                put("currentIndex", null)
+            })
+            ret.put("runtime", JSObject().apply {
+                put("isPlaying", false)
+                put("positionMs", 0)
+                put("durationMs", 0)
+            })
+            ret.put("playMode", "sequential")
+            invoke.resolve(ret)
+        }
+    }
+
+    @Command
+    fun clearPlayingQueue(invoke: Invoke) {
+        try {
+            val service = MusicPlayerService.instance
+            if (service != null) {
+                service.clearPlayingQueue()
+            } else {
+                MusicPlayerService.savePersistedSessionSnapshot(activity, MusicPlayerService.emptySessionSnapshot())
+            }
+
+            val ret = JSObject()
+            ret.put("success", true)
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear playing queue", e)
+            val ret = JSObject()
+            ret.put("success", false)
+            ret.put("message", e.message)
+            invoke.resolve(ret)
+        }
+    }
+
+    @Command
+    fun setPlayMode(invoke: Invoke) {
+        try {
+            val args = invoke.parseArgs(SetPlayModeArgs::class.java)
+            val playMode = args.playMode ?: "sequential"
+            val service = MusicPlayerService.instance
+            if (service != null) {
+                service.setPlayMode(playMode)
+            } else {
+                val snapshot = MusicPlayerService.loadPersistedSessionSnapshot(activity)
+                MusicPlayerService.savePersistedSessionSnapshot(
+                    activity,
+                    snapshot.copy(playMode = playMode)
+                )
+            }
+
+            val ret = JSObject()
+            ret.put("success", true)
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set play mode", e)
+            val ret = JSObject()
+            ret.put("success", false)
+            ret.put("message", e.message)
             invoke.resolve(ret)
         }
     }
@@ -317,7 +486,6 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
                 return
             }
 
-            // Store the server library name in SharedPreferences
             val prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit()
                 .putString(PREF_SERVER_LIB_NAME, args.libraryName)

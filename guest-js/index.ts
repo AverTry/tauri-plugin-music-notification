@@ -21,6 +21,33 @@ export interface PlaybackState {
   duration: number;
 }
 
+export type PlayMode = 'sequential' | 'shuffle' | 'loop'
+
+export interface QueueSong {
+  id: number;
+  name: string;
+  path: string;
+  url: string;
+  lufs: number | null;
+}
+
+export interface PlayingQueue {
+  songs: QueueSong[];
+  currentIndex: number | null;
+}
+
+export interface PlaybackRuntime {
+  isPlaying: boolean;
+  positionMs: number;
+  durationMs: number;
+}
+
+export interface PlaybackSession {
+  queue: PlayingQueue;
+  runtime: PlaybackRuntime;
+  playMode: PlayMode;
+}
+
 export async function play(options: PlayOptions): Promise<{ success: boolean; message?: string }> {
   return await invoke<{ success: boolean; message?: string }>('plugin:music-notification|play', {
     payload: options,
@@ -55,6 +82,42 @@ export async function seek(position: number): Promise<{ success: boolean }> {
 
 export async function getState(): Promise<PlaybackState> {
   return await invoke<PlaybackState>('plugin:music-notification|get_state');
+}
+
+export async function setPlayingQueue(
+  queue: PlayingQueue,
+  playMode: PlayMode
+): Promise<{ success: boolean; message?: string }> {
+  return await invoke<{ success: boolean; message?: string }>(
+    'plugin:music-notification|set_playing_queue',
+    {
+      payload: {
+        queue,
+        playMode,
+      },
+    }
+  );
+}
+
+export async function getPlaybackSession(): Promise<PlaybackSession> {
+  return await invoke<PlaybackSession>('plugin:music-notification|get_playback_session');
+}
+
+export async function clearPlayingQueue(): Promise<{ success: boolean; message?: string }> {
+  return await invoke<{ success: boolean; message?: string }>(
+    'plugin:music-notification|clear_playing_queue'
+  );
+}
+
+export async function setPlayMode(playMode: PlayMode): Promise<{ success: boolean; message?: string }> {
+  return await invoke<{ success: boolean; message?: string }>(
+    'plugin:music-notification|set_play_mode',
+    {
+      payload: {
+        playMode,
+      },
+    }
+  );
 }
 
 export async function startService(): Promise<{ success: boolean; message?: string }> {

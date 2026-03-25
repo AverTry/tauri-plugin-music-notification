@@ -46,6 +46,67 @@ pub struct PlaybackState {
     pub duration: i64,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PlayMode {
+    Sequential,
+    Shuffle,
+    Loop,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueSong {
+    pub id: i64,
+    pub name: String,
+    pub path: String,
+    pub url: String,
+    pub lufs: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayingQueue {
+    pub songs: Vec<QueueSong>,
+    pub current_index: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackRuntime {
+    pub is_playing: bool,
+    pub position_ms: i64,
+    pub duration_ms: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackSession {
+    pub queue: PlayingQueue,
+    pub runtime: PlaybackRuntime,
+    pub play_mode: PlayMode,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetPlayingQueueRequest {
+    pub queue: PlayingQueue,
+    pub play_mode: PlayMode,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueMutationResponse {
+    pub success: bool,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetPlayModeRequest {
+    pub play_mode: PlayMode,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetVolumeRequest {

@@ -92,6 +92,36 @@ impl<R: Runtime> MusicNotification<R> {
             .map_err(Into::into)
     }
 
+    pub fn set_playing_queue(
+        &self,
+        payload: SetPlayingQueueRequest,
+    ) -> crate::Result<QueueMutationResponse> {
+        self.0
+            .run_mobile_plugin("setPlayingQueue", payload)
+            .map_err(Into::into)
+    }
+
+    pub fn get_playback_session(&self) -> crate::Result<PlaybackSession> {
+        self.0
+            .run_mobile_plugin("getPlaybackSession", EmptyRequest {})
+            .map_err(Into::into)
+    }
+
+    pub fn clear_playing_queue(&self) -> crate::Result<QueueMutationResponse> {
+        self.0
+            .run_mobile_plugin("clearPlayingQueue", EmptyRequest {})
+            .map_err(Into::into)
+    }
+
+    pub fn set_play_mode(
+        &self,
+        payload: SetPlayModeRequest,
+    ) -> crate::Result<QueueMutationResponse> {
+        self.0
+            .run_mobile_plugin("setPlayMode", payload)
+            .map_err(Into::into)
+    }
+
     pub fn start_service(&self) -> crate::Result<EmptyResponse> {
         self.0
             .run_mobile_plugin("startService", EmptyRequest {})

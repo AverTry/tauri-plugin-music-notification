@@ -1,6 +1,9 @@
 package com.plugin.music_notification
 
-import android.app.*
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
@@ -15,6 +18,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import androidx.media.session.MediaButtonReceiver
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MusicPlayerService : Service() {
 
@@ -22,6 +27,9 @@ class MusicPlayerService : Service() {
         private const val TAG = "MusicPlayerService"
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "MusicPlayerChannel"
+        private const val PREFS_NAME = "music_notification"
+        private const val PREF_SESSION = "playback_session"
+
         const val ACTION_PLAY = "com.plugin.music_notification.PLAY"
         const val ACTION_PAUSE = "com.plugin.music_notification.PAUSE"
         const val ACTION_RESUME = "com.plugin.music_notification.RESUME"
@@ -41,21 +49,16 @@ class MusicPlayerService : Service() {
         const val EXTRA_VOLUME = "volume"
 
         var instance: MusicPlayerService? = null
-        private val tracks = mutableListOf<TrackInfo>()
-        private var currentTrackIndex = 0
 
-        // Server library loader - uses the Server trait's registered library name
         fun loadServerLibrary(context: Context): String? {
-            // Get registered server library name from plugin's SharedPreferences
             val libName = MusicNotificationPlugin.getServerLibName(context)
-                ?: "musicnotification_lib"  // fallback to default
+                ?: "musicnotification_lib"
 
             try {
                 System.loadLibrary(libName)
                 return libName
             } catch (e: UnsatisfiedLinkError) {
                 Log.e(TAG, "Failed to load server library $libName", e)
-                // Try loading using the app's classloader
                 try {
                     val appClassLoader = context.applicationContext.classLoader
                     val loadLibraryMethod = Class.forName("java.lang.System").getDeclaredMethod(
@@ -71,33 +74,140 @@ class MusicPlayerService : Service() {
                 }
             }
         }
-    }
 
-    // Declare the well-known native Rust functions for Server trait
-    // These are exported by the plugin and call the registered trait implementation
-    // Note: JNI mangles underscores, so we use camelCase here
-    private external fun serverStart(): Int
-    private external fun serverStop(): Int
+        fun emptySessionSnapshot(): SessionSnapshot {
+            return SessionSnapshot(
+                queue = PlayingQueueSnapshot(emptyList(), null),
+                runtime = PlaybackRuntimeSnapshot(false, 0L, 0L),
+                playMode = "sequential"
+            )
+        }
 
-    // State tracking for service lifetime management
-    private var httpServerRunning = false
-    private var musicPlayerActive = false
+        fun loadPersistedSessionSnapshot(context: Context): SessionSnapshot {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val raw = prefs.getString(PREF_SESSION, null) ?: return emptySessionSnapshot()
 
-    private fun updateServiceLifetime() {
-        // Only stop service if both HTTP server and music player are done
-        if (!httpServerRunning && !musicPlayerActive) {
-            Log.d(TAG, "Both server and player done, stopping service")
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            return try {
+                parseSessionJson(JSONObject(raw))
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse persisted playback session", e)
+                emptySessionSnapshot()
+            }
+        }
+
+        fun savePersistedSessionSnapshot(context: Context, snapshot: SessionSnapshot) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString(PREF_SESSION, snapshotToJson(snapshot).toString())
+                .apply()
+        }
+
+        private fun parseSessionJson(json: JSONObject): SessionSnapshot {
+            val queueJson = json.optJSONObject("queue") ?: JSONObject()
+            val songsJson = queueJson.optJSONArray("songs") ?: JSONArray()
+            val songs = mutableListOf<QueueSongInfo>()
+            for (i in 0 until songsJson.length()) {
+                val songJson = songsJson.optJSONObject(i) ?: continue
+                songs.add(
+                    QueueSongInfo(
+                        id = songJson.optLong("id", -1L),
+                        name = songJson.optString("name", ""),
+                        path = songJson.optString("path", ""),
+                        url = songJson.optString("url", ""),
+                        lufs = if (songJson.has("lufs") && !songJson.isNull("lufs")) songJson.optDouble("lufs") else null
+                    )
+                )
+            }
+
+            val runtimeJson = json.optJSONObject("runtime") ?: JSONObject()
+            val currentIndex = if (queueJson.has("currentIndex") && !queueJson.isNull("currentIndex")) {
+                queueJson.optInt("currentIndex")
+            } else {
+                null
+            }
+
+            return SessionSnapshot(
+                queue = PlayingQueueSnapshot(songs, currentIndex),
+                runtime = PlaybackRuntimeSnapshot(
+                    isPlaying = runtimeJson.optBoolean("isPlaying", false),
+                    positionMs = runtimeJson.optLong("positionMs", 0L),
+                    durationMs = runtimeJson.optLong("durationMs", 0L)
+                ),
+                playMode = json.optString("playMode", "sequential")
+            )
+        }
+
+        private fun snapshotToJson(snapshot: SessionSnapshot): JSONObject {
+            val queueJson = JSONObject()
+            val songsJson = JSONArray()
+
+            snapshot.queue.songs.forEach { song ->
+                val songJson = JSONObject()
+                songJson.put("id", song.id)
+                songJson.put("name", song.name)
+                songJson.put("path", song.path)
+                songJson.put("url", song.url)
+                if (song.lufs == null) {
+                    songJson.put("lufs", JSONObject.NULL)
+                } else {
+                    songJson.put("lufs", song.lufs)
+                }
+                songsJson.put(songJson)
+            }
+
+            queueJson.put("songs", songsJson)
+            if (snapshot.queue.currentIndex == null) {
+                queueJson.put("currentIndex", JSONObject.NULL)
+            } else {
+                queueJson.put("currentIndex", snapshot.queue.currentIndex)
+            }
+
+            val runtimeJson = JSONObject()
+            runtimeJson.put("isPlaying", snapshot.runtime.isPlaying)
+            runtimeJson.put("positionMs", snapshot.runtime.positionMs)
+            runtimeJson.put("durationMs", snapshot.runtime.durationMs)
+
+            val json = JSONObject()
+            json.put("queue", queueJson)
+            json.put("runtime", runtimeJson)
+            json.put("playMode", snapshot.playMode)
+            return json
         }
     }
 
-    data class TrackInfo(
+    data class QueueSongInfo(
+        val id: Long,
+        val name: String,
+        val path: String,
         val url: String,
-        val title: String,
-        val artist: String,
-        val album: String
+        val lufs: Double?
     )
+
+    data class PlayingQueueSnapshot(
+        val songs: List<QueueSongInfo>,
+        val currentIndex: Int?
+    )
+
+    data class PlaybackRuntimeSnapshot(
+        val isPlaying: Boolean,
+        val positionMs: Long,
+        val durationMs: Long
+    )
+
+    data class SessionSnapshot(
+        val queue: PlayingQueueSnapshot,
+        val runtime: PlaybackRuntimeSnapshot,
+        val playMode: String
+    )
+
+    private external fun serverStart(): Int
+    private external fun serverStop(): Int
+
+    private var httpServerRunning = false
+    private var musicPlayerActive = false
+    private var tracks = mutableListOf<QueueSongInfo>()
+    private var currentTrackIndex = -1
+    private var playMode = "sequential"
 
     private var mediaPlayer: MediaPlayer? = null
     private var isPrepared = false
@@ -105,12 +215,23 @@ class MusicPlayerService : Service() {
     private lateinit var progressRunnable: Runnable
     private lateinit var mediaSession: MediaSessionCompat
     private var currentUrl: String? = null
+    private var startCommandCount = 0L
+    private var playbackGeneration = 0L
+
+    private fun updateServiceLifetime() {
+        if (!httpServerRunning && !musicPlayerActive) {
+            Log.d(TAG, "Both server and player done, stopping service")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         handler = Handler(Looper.getMainLooper())
         mediaSession = MediaSessionCompat(this, "MusicPlayerService")
+        restorePersistedSession()
 
         mediaSession.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
@@ -135,12 +256,13 @@ class MusicPlayerService : Service() {
 
             override fun onStop() {
                 Log.d(TAG, "MediaSession callback: onStop")
-                stopMusic()
+                stopMusic(clearQueue = false)
             }
 
             override fun onSeekTo(pos: Long) {
                 Log.d(TAG, "MediaSession callback: onSeekTo $pos")
                 mediaPlayer?.seekTo(pos.toInt())
+                persistSession(isPlayingOverride = mediaPlayer?.isPlaying)
                 updatePlaybackState()
             }
         })
@@ -151,6 +273,7 @@ class MusicPlayerService : Service() {
             override fun run() {
                 mediaPlayer?.let {
                     if (it.isPlaying) {
+                        persistSession(isPlayingOverride = true)
                         updatePlaybackState()
                         updateNotification()
                         handler.postDelayed(this, 1000)
@@ -159,13 +282,11 @@ class MusicPlayerService : Service() {
             }
         }
 
-        // Load the server library that contains the Server trait implementation
         val loadedLib = loadServerLibrary(this)
         if (loadedLib == null) {
             Log.e(TAG, "No server library could be loaded, JNI call will likely fail")
         }
 
-        // Start the server via well-known JNI function
         val result = try {
             serverStart()
         } catch (e: UnsatisfiedLinkError) {
@@ -183,22 +304,25 @@ class MusicPlayerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startCommandCount += 1
         Log.d(TAG, "========== onStartCommand ==========")
-        Log.d(TAG, "Action: ${intent?.action}")
+        Log.d(
+            TAG,
+            "onStartCommand#${startCommandCount}: startId=$startId flags=$flags action=${intent?.action}"
+        )
 
-        MediaButtonReceiver.handleIntent(mediaSession, intent)
+        if (intent?.action == Intent.ACTION_MEDIA_BUTTON) {
+            Log.d(TAG, "onStartCommand#${startCommandCount}: forwarding ACTION_MEDIA_BUTTON to MediaButtonReceiver")
+            MediaButtonReceiver.handleIntent(mediaSession, intent)
+        }
 
         intent?.let {
             when (it.action) {
                 ACTION_START_SERVICE -> {
                     Log.d(TAG, "Action: START_SERVICE")
-                    // Service already created with HTTP server running
-                    // Just ensure foreground is started
                 }
                 ACTION_STOP_SERVICE -> {
                     Log.d(TAG, "Action: STOP_SERVICE")
-                    // Stop the server via well-known JNI function
-                    Log.d(TAG, "Stopping server via serverStop()...")
                     val result = serverStop()
                     if (result == 0) {
                         Log.d(TAG, "Server stopped successfully")
@@ -217,32 +341,30 @@ class MusicPlayerService : Service() {
                     val title = it.getStringExtra(EXTRA_TITLE) ?: "Unknown Title"
                     val artist = it.getStringExtra(EXTRA_ARTIST) ?: "Unknown Artist"
                     val album = it.getStringExtra(EXTRA_ALBUM) ?: "Unknown Album"
-                    playMusic(url, title, artist, album)
+                    playTrackByUrl(url, title, artist, album)
                 }
-                ACTION_PAUSE -> {
-                    Log.d(TAG, "Action: PAUSE")
-                    pauseMusic()
-                }
-                ACTION_RESUME -> {
-                    Log.d(TAG, "Action: RESUME")
-                    resumeMusic()
-                }
-                ACTION_STOP -> {
-                    Log.d(TAG, "Action: STOP")
-                    stopMusic()
-                }
+                ACTION_PAUSE -> pauseMusic()
+                ACTION_RESUME -> resumeMusic()
+                ACTION_STOP -> stopMusic(clearQueue = false)
                 ACTION_NEXT -> {
-                    Log.d(TAG, "Action: NEXT")
+                    Log.d(
+                        TAG,
+                        "onStartCommand#${startCommandCount}: handling ACTION_NEXT currentTrackIndex=$currentTrackIndex queueSize=${tracks.size}"
+                    )
                     playNextTrack()
                 }
                 ACTION_PREVIOUS -> {
-                    Log.d(TAG, "Action: PREVIOUS")
+                    Log.d(
+                        TAG,
+                        "onStartCommand#${startCommandCount}: handling ACTION_PREVIOUS currentTrackIndex=$currentTrackIndex queueSize=${tracks.size}"
+                    )
                     playPreviousTrack()
                 }
                 ACTION_SEEK -> {
                     val position = it.getLongExtra(EXTRA_POSITION, 0)
-                    Log.d(TAG, "Action: SEEK to $position")
+                    Log.d(TAG, "onStartCommand#${startCommandCount}: ACTION_SEEK to $position")
                     mediaPlayer?.seekTo(position.toInt())
+                    persistSession(isPlayingOverride = mediaPlayer?.isPlaying)
                     updatePlaybackState()
                 }
                 ACTION_SET_VOLUME -> {
@@ -260,202 +382,356 @@ class MusicPlayerService : Service() {
         return START_STICKY
     }
 
-    fun addTrack(url: String, title: String, artist: String, album: String) {
-        tracks.add(TrackInfo(url, title, artist, album))
+    fun setPlayingQueue(songs: List<QueueSongInfo>, currentIndex: Int?, newPlayMode: String) {
+        tracks = songs.toMutableList()
+        currentTrackIndex = when {
+            tracks.isEmpty() -> -1
+            currentIndex == null -> 0
+            currentIndex < 0 -> 0
+            currentIndex >= tracks.size -> tracks.lastIndex
+            else -> currentIndex
+        }
+        playMode = normalizePlayMode(newPlayMode)
+        if (currentTrackIndex in tracks.indices) {
+            currentUrl = tracks[currentTrackIndex].url
+        }
+        persistSession(isPlayingOverride = mediaPlayer?.isPlaying)
+        updateNotification()
     }
 
-    private fun playMusic(url: String, title: String, artist: String, album: String) {
-        Log.d(TAG, "========== playMusic called ==========")
-        Log.d(TAG, "URL: $url")
-        Log.d(TAG, "Title: $title, Artist: $artist, Album: $album")
-        Log.d(TAG, "Current state - mediaPlayer: ${mediaPlayer != null}, isPrepared: $isPrepared, currentUrl: $currentUrl")
+    fun setPlayMode(newPlayMode: String) {
+        playMode = normalizePlayMode(newPlayMode)
+        persistSession(isPlayingOverride = mediaPlayer?.isPlaying)
+    }
+
+    fun clearPlayingQueue() {
+        stopMusic(clearQueue = true)
+    }
+
+    fun getPlaybackSession(): SessionSnapshot {
+        return buildSessionSnapshot()
+    }
+
+    fun getPlaybackState(): Triple<Boolean, Long, Long> {
+        val runtime = buildRuntimeSnapshot()
+        return Triple(runtime.isPlaying, runtime.positionMs, runtime.durationMs)
+    }
+
+    private fun restorePersistedSession() {
+        val snapshot = loadPersistedSessionSnapshot(this)
+        tracks = snapshot.queue.songs.toMutableList()
+        currentTrackIndex = when {
+            tracks.isEmpty() -> -1
+            snapshot.queue.currentIndex == null -> 0
+            snapshot.queue.currentIndex < 0 -> 0
+            snapshot.queue.currentIndex >= tracks.size -> tracks.lastIndex
+            else -> snapshot.queue.currentIndex
+        }
+        playMode = normalizePlayMode(snapshot.playMode)
+        currentUrl = if (currentTrackIndex in tracks.indices) tracks[currentTrackIndex].url else null
+        musicPlayerActive = snapshot.runtime.isPlaying
+    }
+
+    private fun buildSessionSnapshot(): SessionSnapshot {
+        val currentIndex = if (currentTrackIndex in tracks.indices) currentTrackIndex else null
+        return SessionSnapshot(
+            queue = PlayingQueueSnapshot(tracks.toList(), currentIndex),
+            runtime = buildRuntimeSnapshot(),
+            playMode = playMode
+        )
+    }
+
+    private fun buildRuntimeSnapshot(): PlaybackRuntimeSnapshot {
+        mediaPlayer?.let { player ->
+            return PlaybackRuntimeSnapshot(
+                isPlaying = player.isPlaying,
+                positionMs = player.currentPosition.toLong(),
+                durationMs = player.duration.toLong()
+            )
+        }
+
+        val persisted = loadPersistedSessionSnapshot(this)
+        return PlaybackRuntimeSnapshot(
+            isPlaying = false,
+            positionMs = persisted.runtime.positionMs,
+            durationMs = persisted.runtime.durationMs
+        )
+    }
+
+    private fun persistSession(isPlayingOverride: Boolean? = null) {
+        val runtime = mediaPlayer?.let { player ->
+            PlaybackRuntimeSnapshot(
+                isPlaying = isPlayingOverride ?: player.isPlaying,
+                positionMs = player.currentPosition.toLong(),
+                durationMs = player.duration.toLong()
+            )
+        } ?: PlaybackRuntimeSnapshot(
+            isPlaying = isPlayingOverride ?: false,
+            positionMs = 0L,
+            durationMs = 0L
+        )
+
+        savePersistedSessionSnapshot(
+            this,
+            SessionSnapshot(
+                queue = PlayingQueueSnapshot(
+                    songs = tracks.toList(),
+                    currentIndex = if (currentTrackIndex in tracks.indices) currentTrackIndex else null
+                ),
+                runtime = runtime,
+                playMode = playMode
+            )
+        )
+    }
+
+    private fun normalizePlayMode(rawMode: String?): String {
+        return when (rawMode) {
+            "shuffle" -> "shuffle"
+            "loop" -> "loop"
+            else -> "sequential"
+        }
+    }
+
+    private fun playTrackByUrl(url: String, title: String, artist: String, album: String) {
+        val queueIndex = tracks.indexOfFirst { it.url == url }
+        if (queueIndex >= 0) {
+            Log.d(TAG, "playTrackByUrl: matched queueIndex=$queueIndex title=${tracks[queueIndex].name}")
+            currentTrackIndex = queueIndex
+            val track = tracks[queueIndex]
+            playTrack(track, artist, album)
+            return
+        }
+
+        val fallbackTrack = QueueSongInfo(
+            id = -1L,
+            name = title,
+            path = "",
+            url = url,
+            lufs = null
+        )
+        tracks = mutableListOf(fallbackTrack)
+        currentTrackIndex = 0
+        playMode = "sequential"
+        playTrack(fallbackTrack, artist, album)
+    }
+
+    private fun playTrack(track: QueueSongInfo, artist: String = "Unknown Artist", album: String = "Unknown Album") {
+        Log.d(TAG, "========== playTrack called ==========")
+        Log.d(TAG, "Track: ${track.name} (${track.url}) currentTrackIndex=$currentTrackIndex queueSize=${tracks.size}")
 
         musicPlayerActive = true
 
-        if (currentUrl == url && mediaPlayer != null && isPrepared) {
-            Log.d(TAG, "Same URL already playing, resuming...")
+        if (currentUrl == track.url && mediaPlayer != null && isPrepared) {
+            Log.d(TAG, "Same URL already prepared, resuming")
             resumeMusic()
             return
         }
 
-        Log.d(TAG, "Cleaning up existing MediaPlayer...")
         mediaPlayer?.let { player ->
             try {
-                Log.d(TAG, "Existing player state - isPlaying: ${player.isPlaying}")
+                player.setOnPreparedListener(null)
+                player.setOnErrorListener(null)
+                player.setOnCompletionListener(null)
                 if (isPrepared || player.isPlaying) {
-                    Log.d(TAG, "Stopping MediaPlayer...")
                     player.stop()
-                    Log.d(TAG, "MediaPlayer stopped")
-                } else {
-                    Log.d(TAG, "MediaPlayer not playing, skipping stop")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error stopping MediaPlayer: ${e.message}", e)
+                Log.e(TAG, "Error stopping MediaPlayer", e)
             }
             try {
-                Log.d(TAG, "Releasing MediaPlayer...")
                 player.release()
-                Log.d(TAG, "MediaPlayer released")
             } catch (e: Exception) {
-                Log.e(TAG, "Error releasing MediaPlayer: ${e.message}", e)
+                Log.e(TAG, "Error releasing MediaPlayer", e)
             }
         }
+
         mediaPlayer = null
         isPrepared = false
-        currentUrl = url
-        Log.d(TAG, "State reset complete, creating new MediaPlayer...")
+        currentUrl = track.url
+        playbackGeneration += 1
+        val generation = playbackGeneration
+        persistSession(isPlayingOverride = false)
 
         mediaPlayer = MediaPlayer().apply {
             try {
-                Log.d(TAG, "Setting data source: $url")
-                setDataSource(url)
-                Log.d(TAG, "Data source set successfully")
+                setDataSource(track.url)
 
                 setOnPreparedListener { mp ->
+                    if (mediaPlayer !== this || playbackGeneration != generation || currentUrl != track.url) {
+                        Log.d(
+                            TAG,
+                            "Ignoring stale onPrepared for generation=$generation currentGeneration=$playbackGeneration track=${track.name}"
+                        )
+                        return@setOnPreparedListener
+                    }
                     Log.d(TAG, "========== onPrepared called ==========")
-                    Log.d(TAG, "Duration: ${mp.duration}ms")
                     isPrepared = true
-                    Log.d(TAG, "isPrepared set to true")
-
                     mediaSession.setMetadata(
                         MediaMetadataCompat.Builder()
-                            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.name)
                             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
                             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
                             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, mp.duration.toLong())
                             .build()
                     )
-                    Log.d(TAG, "Metadata set, calling resumeMusic()...")
+                    persistSession(isPlayingOverride = false)
                     resumeMusic()
                 }
 
-                setOnErrorListener { mp, what, extra ->
-                    Log.e(TAG, "========== onError called ==========")
+                setOnErrorListener { _, what, extra ->
+                    if (mediaPlayer !== this || playbackGeneration != generation || currentUrl != track.url) {
+                        Log.d(
+                            TAG,
+                            "Ignoring stale onError for generation=$generation currentGeneration=$playbackGeneration what=$what extra=$extra"
+                        )
+                        return@setOnErrorListener true
+                    }
                     Log.e(TAG, "MediaPlayer error - what: $what, extra: $extra")
                     isPrepared = false
-                    false
+                    persistSession(isPlayingOverride = false)
+                    true
                 }
 
                 setOnCompletionListener {
+                    if (mediaPlayer !== this || playbackGeneration != generation || currentUrl != track.url) {
+                        Log.d(
+                            TAG,
+                            "Ignoring stale onCompletion for generation=$generation currentGeneration=$playbackGeneration track=${track.name}"
+                        )
+                        return@setOnCompletionListener
+                    }
                     Log.d(TAG, "========== onCompletion called ==========")
                     playNextTrack()
                 }
 
-                Log.d(TAG, "Calling prepareAsync()...")
                 prepareAsync()
-                Log.d(TAG, "prepareAsync() called, waiting for onPrepared...")
-
             } catch (e: Exception) {
-                Log.e(TAG, "========== Exception in playMusic ==========")
-                Log.e(TAG, "Error: ${e.message}", e)
-                e.printStackTrace()
+                Log.e(TAG, "Exception in playTrack", e)
                 isPrepared = false
+                persistSession(isPlayingOverride = false)
             }
         }
     }
 
     private fun resumeMusic() {
-        Log.d(TAG, "========== resumeMusic called ==========")
         mediaPlayer?.let {
-            Log.d(TAG, "MediaPlayer exists, isPrepared: $isPrepared, isPlaying: ${it.isPlaying}")
             if (isPrepared && !it.isPlaying) {
-                Log.d(TAG, "Starting playback...")
                 it.start()
                 handler.post(progressRunnable)
+                persistSession(isPlayingOverride = true)
                 updatePlaybackState()
                 updateNotification()
-                Log.d(TAG, "Playback started")
-            } else if (!isPrepared) {
-                Log.w(TAG, "Cannot resume - not prepared yet")
-            } else {
-                Log.w(TAG, "Already playing")
             }
         } ?: Log.w(TAG, "MediaPlayer is null")
     }
 
     private fun pauseMusic() {
-        Log.d(TAG, "========== pauseMusic called ==========")
         mediaPlayer?.let {
             if (it.isPlaying) {
-                Log.d(TAG, "Pausing playback...")
                 it.pause()
                 handler.removeCallbacks(progressRunnable)
+                persistSession(isPlayingOverride = false)
                 updatePlaybackState()
                 updateNotification()
-                Log.d(TAG, "Playback paused")
-            } else {
-                Log.w(TAG, "Not playing, nothing to pause")
             }
         } ?: Log.w(TAG, "MediaPlayer is null")
     }
 
-    private fun stopMusic() {
-        Log.d(TAG, "========== stopMusic called ==========")
+    private fun stopMusic(clearQueue: Boolean) {
         handler.removeCallbacks(progressRunnable)
         mediaPlayer?.let { player ->
             try {
-                Log.d(TAG, "isPlaying: ${player.isPlaying}")
                 if (player.isPlaying) {
-                    Log.d(TAG, "Stopping MediaPlayer...")
                     player.stop()
-                    Log.d(TAG, "MediaPlayer stopped")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error stopping: ${e.message}", e)
+                Log.e(TAG, "Error stopping media player", e)
             }
             try {
-                Log.d(TAG, "Releasing MediaPlayer...")
                 player.release()
-                Log.d(TAG, "MediaPlayer released")
             } catch (e: Exception) {
-                Log.e(TAG, "Error releasing: ${e.message}", e)
+                Log.e(TAG, "Error releasing media player", e)
             }
         }
         mediaPlayer = null
         isPrepared = false
         currentUrl = null
         musicPlayerActive = false
-        Log.d(TAG, "State reset, checking service lifetime")
+
+        if (clearQueue) {
+            tracks = mutableListOf()
+            currentTrackIndex = -1
+        }
+
+        persistSession(isPlayingOverride = false)
         updatePlaybackState()
         updateNotification()
-        // Don't call stopSelf() directly - use updateServiceLifetime()
         updateServiceLifetime()
     }
 
     private fun playNextTrack() {
-        Log.d(TAG, "========== playNextTrack ==========")
         if (tracks.isEmpty()) {
-            Log.w(TAG, "No tracks in playlist")
+            Log.w(TAG, "No tracks in queue")
             return
         }
-        currentTrackIndex = (currentTrackIndex + 1) % tracks.size
-        Log.d(TAG, "Moving to track $currentTrackIndex of ${tracks.size}")
-        val track = tracks[currentTrackIndex]
-        playMusic(track.url, track.title, track.artist, track.album)
+
+        val previousIndex = currentTrackIndex
+        if (playMode == "loop" && currentTrackIndex in tracks.indices) {
+            Log.d(
+                TAG,
+                "playNextTrack: loop mode replaying currentTrackIndex=$currentTrackIndex track=${tracks[currentTrackIndex].name}"
+            )
+            playTrack(tracks[currentTrackIndex])
+            return
+        }
+
+        currentTrackIndex = if (currentTrackIndex in tracks.indices) {
+            (currentTrackIndex + 1) % tracks.size
+        } else {
+            0
+        }
+        Log.d(
+            TAG,
+            "playNextTrack: previousIndex=$previousIndex newIndex=$currentTrackIndex playMode=$playMode nextTrack=${tracks[currentTrackIndex].name}"
+        )
+        playTrack(tracks[currentTrackIndex])
     }
 
     private fun playPreviousTrack() {
-        Log.d(TAG, "========== playPreviousTrack ==========")
         if (tracks.isEmpty()) {
-            Log.w(TAG, "No tracks in playlist")
+            Log.w(TAG, "No tracks in queue")
             return
         }
-        currentTrackIndex = if (currentTrackIndex - 1 < 0) tracks.size - 1 else currentTrackIndex - 1
-        Log.d(TAG, "Moving to track $currentTrackIndex of ${tracks.size}")
-        val track = tracks[currentTrackIndex]
-        playMusic(track.url, track.title, track.artist, track.album)
+
+        val previousIndex = currentTrackIndex
+        if (playMode == "loop" && currentTrackIndex in tracks.indices) {
+            Log.d(
+                TAG,
+                "playPreviousTrack: loop mode replaying currentTrackIndex=$currentTrackIndex track=${tracks[currentTrackIndex].name}"
+            )
+            playTrack(tracks[currentTrackIndex])
+            return
+        }
+
+        currentTrackIndex = if (currentTrackIndex in tracks.indices) {
+            if (currentTrackIndex == 0) tracks.lastIndex else currentTrackIndex - 1
+        } else {
+            0
+        }
+        Log.d(
+            TAG,
+            "playPreviousTrack: previousIndex=$previousIndex newIndex=$currentTrackIndex playMode=$playMode previousTrack=${tracks[currentTrackIndex].name}"
+        )
+        playTrack(tracks[currentTrackIndex])
     }
 
     private fun createNotification(): Notification {
         val controller = mediaSession.controller
         val mediaMetadata = controller.metadata
         val description = mediaMetadata?.description
-
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
 
         val isPlaying = mediaPlayer?.isPlaying == true
-
-        // Determine title based on music state
         val title = if (musicPlayerActive && mediaPlayer != null) {
             description?.title ?: "Music Player"
         } else {
@@ -464,17 +740,19 @@ class MusicPlayerService : Service() {
 
         val playPauseAction = NotificationCompat.Action(
             if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
-            if (isPlaying) "Pausar" else "Reproducir",
+            if (isPlaying) "Pause" else "Play",
             MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_PLAY_PAUSE)
         )
 
         val previousAction = NotificationCompat.Action(
-            android.R.drawable.ic_media_previous, "Anterior",
+            android.R.drawable.ic_media_previous,
+            "Previous",
             MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
         )
 
         val nextAction = NotificationCompat.Action(
-            android.R.drawable.ic_media_next, "Siguiente",
+            android.R.drawable.ic_media_next,
+            "Next",
             MediaButtonReceiver.buildMediaButtonPendingIntent(this, PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
         )
 
@@ -510,32 +788,31 @@ class MusicPlayerService : Service() {
             val isPlaying = it.isPlaying
             val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
             val position = it.currentPosition.toLong()
-            val duration = it.duration.toLong()
-
-            Log.d(TAG, "updatePlaybackState: isPlaying=$isPlaying, position=${position}ms, duration=${duration}ms")
 
             val playbackState = PlaybackStateCompat.Builder()
                 .setActions(
                     PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                    PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                    PlaybackStateCompat.ACTION_STOP or
-                    PlaybackStateCompat.ACTION_SEEK_TO
+                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                        PlaybackStateCompat.ACTION_STOP or
+                        PlaybackStateCompat.ACTION_SEEK_TO
                 )
                 .setState(state, position, 1.0f)
                 .build()
             mediaSession.setPlaybackState(playbackState)
-        } ?: Log.d(TAG, "updatePlaybackState: mediaPlayer is null")
-    }
-
-    fun getPlaybackState(): Triple<Boolean, Long, Long> {
-        mediaPlayer?.let {
-            val state = Triple(it.isPlaying, it.currentPosition.toLong(), it.duration.toLong())
-            Log.d(TAG, "getPlaybackState: ${state.first}, ${state.second}ms, ${state.third}ms")
-            return state
+        } ?: run {
+            val playbackState = PlaybackStateCompat.Builder()
+                .setActions(
+                    PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                        PlaybackStateCompat.ACTION_STOP or
+                        PlaybackStateCompat.ACTION_SEEK_TO
+                )
+                .setState(PlaybackStateCompat.STATE_STOPPED, 0L, 0f)
+                .build()
+            mediaSession.setPlaybackState(playbackState)
         }
-        Log.d(TAG, "getPlaybackState: mediaPlayer is null, returning defaults")
-        return Triple(false, 0L, 0L)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -550,15 +827,16 @@ class MusicPlayerService : Service() {
             try {
                 if (isPlaying) stop()
             } catch (e: Exception) {
-                Log.e(TAG, "Error stopping in onDestroy: ${e.message}")
+                Log.e(TAG, "Error stopping in onDestroy", e)
             }
             try {
                 release()
             } catch (e: Exception) {
-                Log.e(TAG, "Error releasing in onDestroy: ${e.message}")
+                Log.e(TAG, "Error releasing in onDestroy", e)
             }
         }
         mediaPlayer = null
+        persistSession(isPlayingOverride = false)
         Log.d(TAG, "onDestroy complete")
     }
 

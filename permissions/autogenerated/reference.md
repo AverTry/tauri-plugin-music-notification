@@ -17,6 +17,10 @@ Default permissions for the plugin
 - `allow-stop-service`
 - `allow-set-volume`
 - `allow-set-server`
+- `allow-set-playing-queue`
+- `allow-get-playback-session`
+- `allow-clear-playing-queue`
+- `allow-set-play-mode`
 
 ## Permission Table
 
@@ -26,6 +30,58 @@ Default permissions for the plugin
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`music-notification-api:allow-clear-playing-queue`
+
+</td>
+<td>
+
+Enables the clear_playing_queue command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-clear-playing-queue`
+
+</td>
+<td>
+
+Denies the clear_playing_queue command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-get-playback-session`
+
+</td>
+<td>
+
+Enables the get_playback_session command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-get-playback-session`
+
+</td>
+<td>
+
+Denies the get_playback_session command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>
@@ -231,6 +287,58 @@ Enables the seek command without any pre-configured scope.
 <td>
 
 Denies the seek command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-set-play-mode`
+
+</td>
+<td>
+
+Enables the set_play_mode command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-set-play-mode`
+
+</td>
+<td>
+
+Denies the set_play_mode command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-set-playing-queue`
+
+</td>
+<td>
+
+Enables the set_playing_queue command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-set-playing-queue`
+
+</td>
+<td>
+
+Denies the set_playing_queue command without any pre-configured scope.
 
 </td>
 </tr>
