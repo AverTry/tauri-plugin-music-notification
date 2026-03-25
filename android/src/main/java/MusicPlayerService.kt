@@ -52,10 +52,9 @@ class MusicPlayerService : Service() {
 
             try {
                 System.loadLibrary(libName)
-                Log.d(TAG, "Server library $libName loaded successfully")
                 return libName
             } catch (e: UnsatisfiedLinkError) {
-                Log.e(TAG, "Failed to load server library $libName: ${e.message}")
+                Log.e(TAG, "Failed to load server library $libName", e)
                 // Try loading using the app's classloader
                 try {
                     val appClassLoader = context.applicationContext.classLoader
@@ -65,10 +64,9 @@ class MusicPlayerService : Service() {
                         ClassLoader::class.java
                     )
                     loadLibraryMethod.invoke(null, libName, appClassLoader)
-                    Log.d(TAG, "Server library $libName loaded via app classloader")
                     return libName
                 } catch (ex: Exception) {
-                    Log.e(TAG, "Failed to load server library $libName via classloader: ${ex.message}")
+                    Log.e(TAG, "Failed to load server library $libName via classloader", ex)
                     return null
                 }
             }
@@ -109,12 +107,10 @@ class MusicPlayerService : Service() {
     private var currentUrl: String? = null
 
     override fun onCreate() {
-        Log.d(TAG, "========== onCreate ==========")
         super.onCreate()
         instance = this
         handler = Handler(Looper.getMainLooper())
         mediaSession = MediaSessionCompat(this, "MusicPlayerService")
-        Log.d(TAG, "MediaSession created")
 
         mediaSession.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
@@ -150,7 +146,6 @@ class MusicPlayerService : Service() {
         })
 
         mediaSession.isActive = true
-        Log.d(TAG, "MediaSession activated")
 
         progressRunnable = object : Runnable {
             override fun run() {
@@ -165,19 +160,26 @@ class MusicPlayerService : Service() {
         }
 
         // Load the server library that contains the Server trait implementation
-        loadServerLibrary(this)
+        val loadedLib = loadServerLibrary(this)
+        if (loadedLib == null) {
+            Log.e(TAG, "No server library could be loaded, JNI call will likely fail")
+        }
 
         // Start the server via well-known JNI function
-        Log.d(TAG, "Starting server via serverStart()...")
-        val result = serverStart()
+        val result = try {
+            serverStart()
+        } catch (e: UnsatisfiedLinkError) {
+            Log.e(TAG, "serverStart() JNI symbol missing", e)
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "serverStart() threw unexpected exception", e)
+            throw e
+        }
         if (result == 0) {
             httpServerRunning = true
-            Log.d(TAG, "Server started successfully, service lifetime tied to server")
         } else {
             Log.e(TAG, "Failed to start server, code: $result")
         }
-
-        Log.d(TAG, "onCreate complete")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
