@@ -252,6 +252,15 @@ Pauses the current playback.
 
 **Returns:** `Promise<{ success: boolean }>`
 
+### `pauseAfter(delayMs: number)`
+
+Schedules a pause after the provided delay in milliseconds. Passing `0` clears any pending timed pause.
+
+**Parameters:**
+- `delayMs` (number): Delay in milliseconds before pausing playback
+
+**Returns:** `Promise<{ success: boolean }>`
+
 ### `resume()`
 
 Resumes paused playback.

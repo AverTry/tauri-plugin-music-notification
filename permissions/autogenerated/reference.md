@@ -7,6 +7,7 @@ Default permissions for the plugin
 - `allow-ping`
 - `allow-play`
 - `allow-pause`
+- `allow-pause-after`
 - `allow-resume`
 - `allow-stop`
 - `allow-next`
@@ -157,6 +158,32 @@ Enables the pause command without any pre-configured scope.
 <td>
 
 Denies the pause command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-pause-after`
+
+</td>
+<td>
+
+Enables the pause_after command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-pause-after`
+
+</td>
+<td>
+
+Denies the pause_after command without any pre-configured scope.
 
 </td>
 </tr>

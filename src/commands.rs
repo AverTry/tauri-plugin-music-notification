@@ -26,6 +26,14 @@ pub(crate) async fn pause<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse
 }
 
 #[command]
+pub(crate) async fn pause_after<R: Runtime>(
+    app: AppHandle<R>,
+    payload: PauseAfterRequest,
+) -> Result<EmptyResponse> {
+    app.music_notification().pause_after(payload)
+}
+
+#[command]
 pub(crate) async fn resume<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
     app.music_notification().resume()
 }

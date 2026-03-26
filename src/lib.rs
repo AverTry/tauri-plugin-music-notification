@@ -42,6 +42,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::ping,
             commands::play,
             commands::pause,
+            commands::pause_after,
             commands::resume,
             commands::stop,
             commands::next,

@@ -32,6 +32,7 @@ class MusicPlayerService : Service() {
 
         const val ACTION_PLAY = "com.plugin.music_notification.PLAY"
         const val ACTION_PAUSE = "com.plugin.music_notification.PAUSE"
+        const val ACTION_PAUSE_AFTER = "com.plugin.music_notification.PAUSE_AFTER"
         const val ACTION_RESUME = "com.plugin.music_notification.RESUME"
         const val ACTION_STOP = "com.plugin.music_notification.STOP"
         const val ACTION_NEXT = "com.plugin.music_notification.NEXT"
@@ -46,6 +47,7 @@ class MusicPlayerService : Service() {
         const val EXTRA_ARTIST = "artist"
         const val EXTRA_ALBUM = "album"
         const val EXTRA_POSITION = "position"
+        const val EXTRA_DELAY_MS = "delayMs"
         const val EXTRA_VOLUME = "volume"
 
         var instance: MusicPlayerService? = null
@@ -217,6 +219,7 @@ class MusicPlayerService : Service() {
     private var currentUrl: String? = null
     private var startCommandCount = 0L
     private var playbackGeneration = 0L
+    private var pauseAfterRunnable: Runnable? = null
 
     private fun updateServiceLifetime() {
         if (!httpServerRunning && !musicPlayerActive) {
@@ -344,6 +347,11 @@ class MusicPlayerService : Service() {
                     playTrackByUrl(url, title, artist, album)
                 }
                 ACTION_PAUSE -> pauseMusic()
+                ACTION_PAUSE_AFTER -> {
+                    val delayMs = it.getLongExtra(EXTRA_DELAY_MS, 0L)
+                    Log.d(TAG, "Action: PAUSE_AFTER delayMs=$delayMs")
+                    schedulePauseAfter(delayMs)
+                }
                 ACTION_RESUME -> resumeMusic()
                 ACTION_STOP -> stopMusic(clearQueue = false)
                 ACTION_NEXT -> {
@@ -637,8 +645,29 @@ class MusicPlayerService : Service() {
         } ?: Log.w(TAG, "MediaPlayer is null")
     }
 
+    private fun schedulePauseAfter(delayMs: Long) {
+        pauseAfterRunnable?.let(handler::removeCallbacks)
+        pauseAfterRunnable = null
+
+        if (delayMs <= 0L) {
+            Log.d(TAG, "schedulePauseAfter: cleared pending timed pause")
+            return
+        }
+
+        val runnable = Runnable {
+            Log.d(TAG, "Timed pause fired after ${delayMs}ms")
+            pauseAfterRunnable = null
+            pauseMusic()
+        }
+        pauseAfterRunnable = runnable
+        handler.postDelayed(runnable, delayMs)
+        Log.d(TAG, "schedulePauseAfter: scheduled timed pause in ${delayMs}ms")
+    }
+
     private fun stopMusic(clearQueue: Boolean) {
         handler.removeCallbacks(progressRunnable)
+        pauseAfterRunnable?.let(handler::removeCallbacks)
+        pauseAfterRunnable = null
         mediaPlayer?.let { player ->
             try {
                 if (player.isPlaying) {
@@ -822,6 +851,8 @@ class MusicPlayerService : Service() {
         super.onDestroy()
         instance = null
         handler.removeCallbacks(progressRunnable)
+        pauseAfterRunnable?.let(handler::removeCallbacks)
+        pauseAfterRunnable = null
         mediaSession.release()
         mediaPlayer?.apply {
             try {

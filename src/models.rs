@@ -38,6 +38,12 @@ pub struct EmptyResponse {
     pub success: bool,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PauseAfterRequest {
+    pub delay_ms: i64,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackState {

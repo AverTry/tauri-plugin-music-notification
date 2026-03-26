@@ -32,6 +32,11 @@ class SeekArgs {
 }
 
 @InvokeArg
+class PauseAfterArgs {
+  var delayMs: Long = 0
+}
+
+@InvokeArg
 class SetVolumeArgs {
   var volume: Float = 0.5f
 }
@@ -142,6 +147,28 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
         } catch (e: Exception) {
             val ret = JSObject()
             ret.put("success", false)
+            invoke.resolve(ret)
+        }
+    }
+
+    @Command
+    fun pauseAfter(invoke: Invoke) {
+        try {
+            val args = invoke.parseArgs(PauseAfterArgs::class.java)
+            val serviceIntent = Intent(activity, MusicPlayerService::class.java).apply {
+                action = MusicPlayerService.ACTION_PAUSE_AFTER
+                putExtra(MusicPlayerService.EXTRA_DELAY_MS, args.delayMs)
+            }
+            activity.startService(serviceIntent)
+
+            val ret = JSObject()
+            ret.put("success", true)
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule timed pause", e)
+            val ret = JSObject()
+            ret.put("success", false)
+            ret.put("message", e.message)
             invoke.resolve(ret)
         }
     }

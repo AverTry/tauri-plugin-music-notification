@@ -4,6 +4,7 @@ permissions = [
   "allow-ping",
   "allow-play",
   "allow-pause",
+  "allow-pause-after",
   "allow-resume",
   "allow-stop",
   "allow-next",

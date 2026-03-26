@@ -52,6 +52,12 @@ impl<R: Runtime> MusicNotification<R> {
             .map_err(Into::into)
     }
 
+    pub fn pause_after(&self, payload: PauseAfterRequest) -> crate::Result<EmptyResponse> {
+        self.0
+            .run_mobile_plugin("pauseAfter", payload)
+            .map_err(Into::into)
+    }
+
     pub fn resume(&self) -> crate::Result<EmptyResponse> {
         self.0
             .run_mobile_plugin("resume", EmptyRequest {})

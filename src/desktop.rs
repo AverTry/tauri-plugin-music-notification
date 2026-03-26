@@ -42,6 +42,10 @@ impl<R: Runtime> MusicNotification<R> {
         Ok(EmptyResponse { success: false })
     }
 
+    pub fn pause_after(&self, _payload: PauseAfterRequest) -> crate::Result<EmptyResponse> {
+        Ok(EmptyResponse { success: false })
+    }
+
     pub fn resume(&self) -> crate::Result<EmptyResponse> {
         Ok(EmptyResponse { success: false })
     }

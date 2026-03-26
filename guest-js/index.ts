@@ -58,6 +58,14 @@ export async function pause(): Promise<{ success: boolean }> {
   return await invoke<{ success: boolean }>('plugin:music-notification|pause');
 }
 
+export async function pauseAfter(delayMs: number): Promise<{ success: boolean }> {
+  return await invoke<{ success: boolean }>('plugin:music-notification|pause_after', {
+    payload: {
+      delayMs,
+    },
+  });
+}
+
 export async function resume(): Promise<{ success: boolean }> {
   return await invoke<{ success: boolean }>('plugin:music-notification|resume');
 }
