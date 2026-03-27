@@ -14,7 +14,7 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <receiver android:name="androidx.media.session.MediaButtonReceiver"
+        <receiver android:name="com.plugin.music_notification.SafeMediaButtonReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />

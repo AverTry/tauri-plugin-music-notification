@@ -216,6 +216,25 @@ class MusicPlayerService : Service() {
     private lateinit var handler: Handler
     private lateinit var progressRunnable: Runnable
     private lateinit var mediaSession: MediaSessionCompat
+
+    fun hasMediaPlayer(): Boolean = mediaPlayer != null
+
+    fun queueSize(): Int = tracks.size
+
+    /** Start playing the current track from the restored queue */
+    fun playCurrentTrack() {
+        if (currentTrackIndex !in tracks.indices) {
+            Log.w(TAG, "playCurrentTrack: no valid track at index $currentTrackIndex")
+            return
+        }
+        Log.d(TAG, "playCurrentTrack: index=$currentTrackIndex track=${tracks[currentTrackIndex].name}")
+        playTrack(tracks[currentTrackIndex])
+    }
+
+    fun stopFromNotification() {
+        stopMusic(clearQueue = false)
+    }
+
     private var currentUrl: String? = null
     private var startCommandCount = 0L
     private var playbackGeneration = 0L
@@ -234,12 +253,17 @@ class MusicPlayerService : Service() {
         instance = this
         handler = Handler(Looper.getMainLooper())
         mediaSession = MediaSessionCompat(this, "MusicPlayerService")
+        Log.d(TAG, "onCreate: MusicPlayerService created, restoring persisted session")
         restorePersistedSession()
 
         mediaSession.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
-                Log.d(TAG, "MediaSession callback: onPlay")
-                resumeMusic()
+                Log.d(TAG, "MediaSession callback: onPlay, mediaPlayer=${mediaPlayer != null}, queueSize=${tracks.size}")
+                if (mediaPlayer == null && currentTrackIndex in tracks.indices) {
+                    playCurrentTrack()
+                } else {
+                    resumeMusic()
+                }
             }
 
             override fun onPause() {
@@ -427,6 +451,10 @@ class MusicPlayerService : Service() {
 
     private fun restorePersistedSession() {
         val snapshot = loadPersistedSessionSnapshot(this)
+        Log.d(TAG, "restorePersistedSession: queueSize=${snapshot.queue.songs.size}, " +
+            "currentIndex=${snapshot.queue.currentIndex}, isPlaying=${snapshot.runtime.isPlaying}, " +
+            "positionMs=${snapshot.runtime.positionMs}, playMode=${snapshot.playMode}, " +
+            "firstSong=${snapshot.queue.songs.firstOrNull()?.name}")
         tracks = snapshot.queue.songs.toMutableList()
         currentTrackIndex = when {
             tracks.isEmpty() -> -1
@@ -438,6 +466,19 @@ class MusicPlayerService : Service() {
         playMode = normalizePlayMode(snapshot.playMode)
         currentUrl = if (currentTrackIndex in tracks.indices) tracks[currentTrackIndex].url else null
         musicPlayerActive = snapshot.runtime.isPlaying
+
+        // Set media session metadata so notification shows the restored track info
+        if (currentTrackIndex in tracks.indices) {
+            val track = tracks[currentTrackIndex]
+            mediaSession.setMetadata(
+                MediaMetadataCompat.Builder()
+                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.name)
+                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, snapshot.runtime.durationMs)
+                    .build()
+            )
+            Log.d(TAG, "restorePersistedSession: set metadata for ${track.name}, durationMs=${snapshot.runtime.durationMs}")
+        }
+        updatePlaybackState()
     }
 
     private fun buildSessionSnapshot(): SessionSnapshot {
@@ -523,7 +564,7 @@ class MusicPlayerService : Service() {
         playTrack(fallbackTrack, artist, album)
     }
 
-    private fun playTrack(track: QueueSongInfo, artist: String = "Unknown Artist", album: String = "Unknown Album") {
+    fun playTrack(track: QueueSongInfo, artist: String = "Unknown Artist", album: String = "Unknown Album") {
         Log.d(TAG, "========== playTrack called ==========")
         Log.d(TAG, "Track: ${track.name} (${track.url}) currentTrackIndex=$currentTrackIndex queueSize=${tracks.size}")
 
@@ -621,7 +662,7 @@ class MusicPlayerService : Service() {
         }
     }
 
-    private fun resumeMusic() {
+    fun resumeMusic() {
         mediaPlayer?.let {
             if (isPrepared && !it.isPlaying) {
                 it.start()
@@ -633,7 +674,7 @@ class MusicPlayerService : Service() {
         } ?: Log.w(TAG, "MediaPlayer is null")
     }
 
-    private fun pauseMusic() {
+    fun pauseMusic() {
         mediaPlayer?.let {
             if (it.isPlaying) {
                 it.pause()
@@ -698,7 +739,7 @@ class MusicPlayerService : Service() {
         updateServiceLifetime()
     }
 
-    private fun playNextTrack() {
+    fun playNextTrack() {
         if (tracks.isEmpty()) {
             Log.w(TAG, "No tracks in queue")
             return
@@ -726,7 +767,7 @@ class MusicPlayerService : Service() {
         playTrack(tracks[currentTrackIndex])
     }
 
-    private fun playPreviousTrack() {
+    fun playPreviousTrack() {
         if (tracks.isEmpty()) {
             Log.w(TAG, "No tracks in queue")
             return
@@ -763,6 +804,8 @@ class MusicPlayerService : Service() {
         val isPlaying = mediaPlayer?.isPlaying == true
         val title = if (musicPlayerActive && mediaPlayer != null) {
             description?.title ?: "Music Player"
+        } else if (currentTrackIndex in tracks.indices) {
+            tracks[currentTrackIndex].name
         } else {
             "No song is playing"
         }

@@ -340,7 +340,8 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
     @Command
     fun getPlaybackSession(invoke: Invoke) {
         try {
-            val snapshot = MusicPlayerService.instance?.getPlaybackSession()
+            val serviceInstance = MusicPlayerService.instance
+            val snapshot = serviceInstance?.getPlaybackSession()
                 ?: MusicPlayerService.loadPersistedSessionSnapshot(activity)
 
             val ret = JSObject()
