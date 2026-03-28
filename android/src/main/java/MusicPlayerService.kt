@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -20,6 +21,8 @@ import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import androidx.media.session.MediaButtonReceiver
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MusicPlayerService : Service() {
 
@@ -202,6 +205,12 @@ class MusicPlayerService : Service() {
         val playMode: String
     )
 
+    data class PrecacheLufsResult(
+        val success: Boolean,
+        val lufs: Double?,
+        val cached: Boolean?
+    )
+
     private external fun serverStart(): Int
     private external fun serverStop(): Int
 
@@ -238,6 +247,7 @@ class MusicPlayerService : Service() {
     private var currentUrl: String? = null
     private var startCommandCount = 0L
     private var playbackGeneration = 0L
+    private var lufsResolutionGeneration = 0L
     private var pauseAfterRunnable: Runnable? = null
 
     private fun updateServiceLifetime() {
@@ -564,7 +574,111 @@ class MusicPlayerService : Service() {
         playTrack(fallbackTrack, artist, album)
     }
 
+    private fun buildPrecacheUrl(track: QueueSongInfo): String? {
+        if (track.id <= 0L) {
+            return null
+        }
+
+        val parsed = Uri.parse(track.url)
+        val path = parsed.path ?: return null
+        val musicMarker = "/music/id/${track.id}"
+        val markerIndex = path.indexOf(musicMarker)
+        if (markerIndex < 0) {
+            return null
+        }
+
+        val prefixPath = path.substring(0, markerIndex)
+        return parsed.buildUpon()
+            .path("${prefixPath}/music/${track.id}/precache-lufs")
+            .clearQuery()
+            .build()
+            .toString()
+    }
+
+    private fun requestPrecacheLufs(track: QueueSongInfo): PrecacheLufsResult? {
+        val precacheUrl = buildPrecacheUrl(track) ?: return null
+        var connection: HttpURLConnection? = null
+
+        return try {
+            connection = URL(precacheUrl).openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
+            connection.doOutput = false
+
+            val statusCode = connection.responseCode
+            val stream = if (statusCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            } ?: return null
+
+            val body = stream.bufferedReader().use { it.readText() }
+            if (body.isBlank()) {
+                return PrecacheLufsResult(statusCode in 200..299, null, null)
+            }
+
+            val json = JSONObject(body)
+            PrecacheLufsResult(
+                success = json.optBoolean("success", statusCode in 200..299),
+                lufs = if (json.has("lufs") && !json.isNull("lufs")) json.optDouble("lufs") else null,
+                cached = if (json.has("cached") && !json.isNull("cached")) json.optBoolean("cached") else null
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "requestPrecacheLufs failed for track=${track.name}", e)
+            null
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun patchTrackLufs(track: QueueSongInfo, lufs: Double): QueueSongInfo {
+        val updatedTrack = track.copy(lufs = lufs)
+        val queueIndex = tracks.indexOfFirst { it.id == track.id }
+        if (queueIndex >= 0) {
+            tracks[queueIndex] = updatedTrack
+            if (queueIndex == currentTrackIndex) {
+                persistSession(isPlayingOverride = mediaPlayer?.isPlaying)
+            }
+        }
+        return updatedTrack
+    }
+
     fun playTrack(track: QueueSongInfo, artist: String = "Unknown Artist", album: String = "Unknown Album") {
+        if (track.lufs != null) {
+            playTrackInternal(track, artist, album)
+            return
+        }
+
+        lufsResolutionGeneration += 1
+        val resolutionGeneration = lufsResolutionGeneration
+
+        Thread {
+            val precacheResult = requestPrecacheLufs(track)
+            val resolvedTrack = if (precacheResult?.success == true && precacheResult.lufs != null) {
+                Log.d(TAG, "playTrack: resolved LUFS before playback for track=${track.name} lufs=${precacheResult.lufs}")
+                patchTrackLufs(track, precacheResult.lufs)
+            } else {
+                if (precacheResult?.cached == false) {
+                    Log.d(TAG, "playTrack: LUFS calculation started in background for track=${track.name}")
+                }
+                track
+            }
+
+            handler.post {
+                if (resolutionGeneration != lufsResolutionGeneration) {
+                    Log.d(
+                        TAG,
+                        "playTrack: skipping stale LUFS resolution result for track=${track.name} generation=$resolutionGeneration currentGeneration=$lufsResolutionGeneration"
+                    )
+                    return@post
+                }
+                playTrackInternal(resolvedTrack, artist, album)
+            }
+        }.start()
+    }
+
+    private fun playTrackInternal(track: QueueSongInfo, artist: String = "Unknown Artist", album: String = "Unknown Album") {
         Log.d(TAG, "========== playTrack called ==========")
         Log.d(TAG, "Track: ${track.name} (${track.url}) currentTrackIndex=$currentTrackIndex queueSize=${tracks.size}")
 
