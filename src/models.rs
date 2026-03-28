@@ -61,6 +61,14 @@ pub enum PlayMode {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NormalizationMode {
+    Auto,
+    Manual,
+    Fixed,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueSong {
     pub id: i64,
@@ -122,6 +130,21 @@ pub struct SetVolumeRequest {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetVolumeResponse {
+    pub success: bool,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetNormalizationConfigRequest {
+    pub mode: NormalizationMode,
+    pub manual_volume: f32,
+    pub fixed_lufs: f64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetNormalizationConfigResponse {
     pub success: bool,
     pub message: Option<String>,
 }

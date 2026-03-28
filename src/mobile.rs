@@ -146,6 +146,15 @@ impl<R: Runtime> MusicNotification<R> {
             .map_err(Into::into)
     }
 
+    pub fn set_normalization_config(
+        &self,
+        payload: SetNormalizationConfigRequest,
+    ) -> crate::Result<SetNormalizationConfigResponse> {
+        self.0
+            .run_mobile_plugin("setNormalizationConfig", payload)
+            .map_err(Into::into)
+    }
+
     pub fn set_server(&self, library_name: String) -> crate::Result<SetServerResponse> {
         self.0
             .run_mobile_plugin("setServer", SetServerRequest { library_name })

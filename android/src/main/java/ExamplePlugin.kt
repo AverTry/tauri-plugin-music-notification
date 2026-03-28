@@ -42,6 +42,13 @@ class SetVolumeArgs {
 }
 
 @InvokeArg
+class SetNormalizationConfigArgs {
+  var mode: String = "auto"
+  var manualVolume: Float = 0.5f
+  var fixedLufs: Double = -27.0
+}
+
+@InvokeArg
 class SetServerArgs {
   var libraryName: String? = null
 }
@@ -487,6 +494,29 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
             val serviceIntent = Intent(activity, MusicPlayerService::class.java).apply {
                 action = MusicPlayerService.ACTION_SET_VOLUME
                 putExtra(MusicPlayerService.EXTRA_VOLUME, args.volume)
+            }
+            activity.startService(serviceIntent)
+
+            val ret = JSObject()
+            ret.put("success", true)
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            val ret = JSObject()
+            ret.put("success", false)
+            ret.put("message", e.message)
+            invoke.resolve(ret)
+        }
+    }
+
+    @Command
+    fun setNormalizationConfig(invoke: Invoke) {
+        try {
+            val args = invoke.parseArgs(SetNormalizationConfigArgs::class.java)
+            val serviceIntent = Intent(activity, MusicPlayerService::class.java).apply {
+                action = MusicPlayerService.ACTION_SET_NORMALIZATION_CONFIG
+                putExtra(MusicPlayerService.EXTRA_NORMALIZATION_MODE, args.mode)
+                putExtra(MusicPlayerService.EXTRA_MANUAL_VOLUME, args.manualVolume)
+                putExtra(MusicPlayerService.EXTRA_FIXED_LUFS, args.fixedLufs)
             }
             activity.startService(serviceIntent)
 

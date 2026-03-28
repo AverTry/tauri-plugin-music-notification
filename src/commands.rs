@@ -112,6 +112,14 @@ pub(crate) async fn set_volume<R: Runtime>(
 }
 
 #[command]
+pub(crate) async fn set_normalization_config<R: Runtime>(
+    app: AppHandle<R>,
+    payload: SetNormalizationConfigRequest,
+) -> Result<SetNormalizationConfigResponse> {
+    app.music_notification().set_normalization_config(payload)
+}
+
+#[command]
 pub(crate) async fn set_server<R: Runtime>(
     app: AppHandle<R>,
     library_name: String,

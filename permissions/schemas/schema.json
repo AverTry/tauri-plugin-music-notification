@@ -427,6 +427,18 @@
           "markdownDescription": "Denies the seek command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_normalization_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-normalization-config",
+          "markdownDescription": "Enables the set_normalization_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_normalization_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-normalization-config",
+          "markdownDescription": "Denies the set_normalization_config command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_play_mode command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-play-mode",
@@ -511,10 +523,10 @@
           "markdownDescription": "Denies the stop_service command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-play`\n- `allow-pause`\n- `allow-pause-after`\n- `allow-resume`\n- `allow-stop`\n- `allow-next`\n- `allow-previous`\n- `allow-seek`\n- `allow-get-state`\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-set-volume`\n- `allow-set-server`\n- `allow-set-playing-queue`\n- `allow-get-playback-session`\n- `allow-clear-playing-queue`\n- `allow-set-play-mode`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-play`\n- `allow-pause`\n- `allow-pause-after`\n- `allow-resume`\n- `allow-stop`\n- `allow-next`\n- `allow-previous`\n- `allow-seek`\n- `allow-get-state`\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-set-volume`\n- `allow-set-normalization-config`\n- `allow-set-server`\n- `allow-set-playing-queue`\n- `allow-get-playback-session`\n- `allow-clear-playing-queue`\n- `allow-set-play-mode`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-play`\n- `allow-pause`\n- `allow-pause-after`\n- `allow-resume`\n- `allow-stop`\n- `allow-next`\n- `allow-previous`\n- `allow-seek`\n- `allow-get-state`\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-set-volume`\n- `allow-set-server`\n- `allow-set-playing-queue`\n- `allow-get-playback-session`\n- `allow-clear-playing-queue`\n- `allow-set-play-mode`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-play`\n- `allow-pause`\n- `allow-pause-after`\n- `allow-resume`\n- `allow-stop`\n- `allow-next`\n- `allow-previous`\n- `allow-seek`\n- `allow-get-state`\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-set-volume`\n- `allow-set-normalization-config`\n- `allow-set-server`\n- `allow-set-playing-queue`\n- `allow-get-playback-session`\n- `allow-clear-playing-queue`\n- `allow-set-play-mode`"
         }
       ]
     }

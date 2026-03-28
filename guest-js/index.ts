@@ -146,6 +146,25 @@ export async function setVolume(options: SetVolumeOptions): Promise<{ success: b
   });
 }
 
+export type NormalizationMode = 'auto' | 'manual' | 'fixed'
+
+export interface SetNormalizationConfigOptions {
+  mode: NormalizationMode;
+  manualVolume: number;
+  fixedLufs: number;
+}
+
+export async function setNormalizationConfig(
+  options: SetNormalizationConfigOptions
+): Promise<{ success: boolean; message?: string }> {
+  return await invoke<{ success: boolean; message?: string }>(
+    'plugin:music-notification|set_normalization_config',
+    {
+      payload: options,
+    }
+  );
+}
+
 export async function setServer(libraryName: string): Promise<{ success: boolean; message?: string }> {
   return await invoke<{ success: boolean; message?: string }>(
     'plugin:music-notification|set_server',

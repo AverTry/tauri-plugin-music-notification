@@ -32,6 +32,7 @@ class MusicPlayerService : Service() {
         private const val CHANNEL_ID = "MusicPlayerChannel"
         private const val PREFS_NAME = "music_notification"
         private const val PREF_SESSION = "playback_session"
+        private const val PREF_NORMALIZATION = "normalization_config"
 
         const val ACTION_PLAY = "com.plugin.music_notification.PLAY"
         const val ACTION_PAUSE = "com.plugin.music_notification.PAUSE"
@@ -44,6 +45,7 @@ class MusicPlayerService : Service() {
         const val ACTION_START_SERVICE = "com.plugin.music_notification.START_SERVICE"
         const val ACTION_STOP_SERVICE = "com.plugin.music_notification.STOP_SERVICE"
         const val ACTION_SET_VOLUME = "com.plugin.music_notification.SET_VOLUME"
+        const val ACTION_SET_NORMALIZATION_CONFIG = "com.plugin.music_notification.SET_NORMALIZATION_CONFIG"
 
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
@@ -52,6 +54,9 @@ class MusicPlayerService : Service() {
         const val EXTRA_POSITION = "position"
         const val EXTRA_DELAY_MS = "delayMs"
         const val EXTRA_VOLUME = "volume"
+        const val EXTRA_NORMALIZATION_MODE = "normalizationMode"
+        const val EXTRA_MANUAL_VOLUME = "manualVolume"
+        const val EXTRA_FIXED_LUFS = "fixedLufs"
 
         var instance: MusicPlayerService? = null
 
@@ -104,6 +109,40 @@ class MusicPlayerService : Service() {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit()
                 .putString(PREF_SESSION, snapshotToJson(snapshot).toString())
+                .apply()
+        }
+
+        data class NormalizationConfig(
+            val mode: String = "auto",
+            val manualVolume: Float = 0.5f,
+            val fixedLufs: Double = -27.0
+        )
+
+        fun loadNormalizationConfig(context: Context): NormalizationConfig {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val raw = prefs.getString(PREF_NORMALIZATION, null) ?: return NormalizationConfig()
+
+            return try {
+                val json = JSONObject(raw)
+                NormalizationConfig(
+                    mode = json.optString("mode", "auto"),
+                    manualVolume = json.optDouble("manualVolume", 0.5).toFloat(),
+                    fixedLufs = json.optDouble("fixedLufs", -27.0)
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse normalization config", e)
+                NormalizationConfig()
+            }
+        }
+
+        fun saveNormalizationConfig(context: Context, config: NormalizationConfig) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = JSONObject()
+            json.put("mode", config.mode)
+            json.put("manualVolume", config.manualVolume.toDouble())
+            json.put("fixedLufs", config.fixedLufs)
+            prefs.edit()
+                .putString(PREF_NORMALIZATION, json.toString())
                 .apply()
         }
 
@@ -249,6 +288,7 @@ class MusicPlayerService : Service() {
     private var playbackGeneration = 0L
     private var lufsResolutionGeneration = 0L
     private var pauseAfterRunnable: Runnable? = null
+    private var normalizationConfig = NormalizationConfig()
 
     private fun updateServiceLifetime() {
         if (!httpServerRunning && !musicPlayerActive) {
@@ -262,6 +302,7 @@ class MusicPlayerService : Service() {
         super.onCreate()
         instance = this
         handler = Handler(Looper.getMainLooper())
+        normalizationConfig = loadNormalizationConfig(this)
         mediaSession = MediaSessionCompat(this, "MusicPlayerService")
         Log.d(TAG, "onCreate: MusicPlayerService created, restoring persisted session")
         restorePersistedSession()
@@ -413,6 +454,25 @@ class MusicPlayerService : Service() {
                     val volume = it.getFloatExtra(EXTRA_VOLUME, 1.0f)
                     Log.d(TAG, "Action: SET_VOLUME to $volume")
                     mediaPlayer?.setVolume(volume, volume)
+                }
+                ACTION_SET_NORMALIZATION_CONFIG -> {
+                    normalizationConfig = NormalizationConfig(
+                        mode = normalizeNormalizationMode(
+                            it.getStringExtra(EXTRA_NORMALIZATION_MODE)
+                        ),
+                        manualVolume = it.getFloatExtra(EXTRA_MANUAL_VOLUME, 0.5f),
+                        fixedLufs = it.getDoubleExtra(EXTRA_FIXED_LUFS, -27.0)
+                    )
+                    saveNormalizationConfig(this, normalizationConfig)
+                    Log.d(
+                        TAG,
+                        "Action: SET_NORMALIZATION_CONFIG mode=${normalizationConfig.mode} manual=${normalizationConfig.manualVolume} fixed=${normalizationConfig.fixedLufs}"
+                    )
+                    val currentTrack = tracks.getOrNull(currentTrackIndex)
+                    if (currentTrack != null) {
+                        applyTrackVolume(currentTrack)
+                    }
+                    Unit
                 }
                 else -> Log.w(TAG, "Unknown action: ${it.action}")
             }
@@ -644,6 +704,45 @@ class MusicPlayerService : Service() {
         return updatedTrack
     }
 
+    private fun normalizeNormalizationMode(mode: String?): String {
+        return when (mode) {
+            "manual", "fixed" -> mode
+            else -> "auto"
+        }
+    }
+
+    private fun calculateTrackVolume(track: QueueSongInfo): Float {
+        val manualVolume = normalizationConfig.manualVolume.coerceIn(0.0f, 1.0f)
+        val trackLufs = track.lufs ?: return manualVolume
+
+        val rawVolume = when (normalizationConfig.mode) {
+            "fixed" -> {
+                Math.pow(10.0, (normalizationConfig.fixedLufs - trackLufs) / 20.0)
+            }
+            "manual" -> {
+                manualVolume.toDouble()
+            }
+            else -> {
+                val minLufs = tracks
+                    .mapNotNull { it.lufs }
+                    .minOrNull()
+                    ?: return manualVolume
+                Math.pow(10.0, (minLufs - trackLufs) / 20.0)
+            }
+        }
+
+        return rawVolume.coerceIn(0.0, 1.0).toFloat()
+    }
+
+    private fun applyTrackVolume(track: QueueSongInfo) {
+        val volume = calculateTrackVolume(track)
+        Log.d(
+            TAG,
+            "applyTrackVolume: track=${track.name} mode=${normalizationConfig.mode} lufs=${track.lufs} volume=$volume"
+        )
+        mediaPlayer?.setVolume(volume, volume)
+    }
+
     fun playTrack(track: QueueSongInfo, artist: String = "Unknown Artist", album: String = "Unknown Album") {
         if (track.lufs != null) {
             playTrackInternal(track, artist, album)
@@ -685,6 +784,7 @@ class MusicPlayerService : Service() {
         musicPlayerActive = true
 
         if (currentUrl == track.url && mediaPlayer != null && isPrepared) {
+            applyTrackVolume(track)
             Log.d(TAG, "Same URL already prepared, resuming")
             resumeMusic()
             return
@@ -729,6 +829,7 @@ class MusicPlayerService : Service() {
                     }
                     Log.d(TAG, "========== onPrepared called ==========")
                     isPrepared = true
+                    applyTrackVolume(track)
                     mediaSession.setMetadata(
                         MediaMetadataCompat.Builder()
                             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.name)

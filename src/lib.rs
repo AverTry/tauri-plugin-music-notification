@@ -56,6 +56,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::start_service,
             commands::stop_service,
             commands::set_volume,
+            commands::set_normalization_config,
             commands::set_server
         ])
         .setup(|app, api| {

@@ -17,6 +17,7 @@ Default permissions for the plugin
 - `allow-start-service`
 - `allow-stop-service`
 - `allow-set-volume`
+- `allow-set-normalization-config`
 - `allow-set-server`
 - `allow-set-playing-queue`
 - `allow-get-playback-session`
@@ -314,6 +315,32 @@ Enables the seek command without any pre-configured scope.
 <td>
 
 Denies the seek command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-set-normalization-config`
+
+</td>
+<td>
+
+Enables the set_normalization_config command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-set-normalization-config`
+
+</td>
+<td>
+
+Denies the set_normalization_config command without any pre-configured scope.
 
 </td>
 </tr>

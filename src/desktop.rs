@@ -131,6 +131,16 @@ impl<R: Runtime> MusicNotification<R> {
         })
     }
 
+    pub fn set_normalization_config(
+        &self,
+        _payload: SetNormalizationConfigRequest,
+    ) -> crate::Result<SetNormalizationConfigResponse> {
+        Ok(SetNormalizationConfigResponse {
+            success: false,
+            message: Some("Normalization config only available on mobile".to_string()),
+        })
+    }
+
     pub fn set_server(&self, _library_name: String) -> crate::Result<SetServerResponse> {
         Ok(SetServerResponse {
             success: false,
