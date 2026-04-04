@@ -386,14 +386,8 @@ class MusicPlayerService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startCommandCount += 1
-        Log.d(TAG, "========== onStartCommand ==========")
-        Log.d(
-            TAG,
-            "onStartCommand#${startCommandCount}: startId=$startId flags=$flags action=${intent?.action}"
-        )
 
         if (intent?.action == Intent.ACTION_MEDIA_BUTTON) {
-            Log.d(TAG, "onStartCommand#${startCommandCount}: forwarding ACTION_MEDIA_BUTTON to MediaButtonReceiver")
             MediaButtonReceiver.handleIntent(mediaSession, intent)
         }
 
@@ -461,21 +455,25 @@ class MusicPlayerService : Service() {
                     mediaPlayer?.setVolume(volume, volume)
                 }
                 ACTION_SET_NORMALIZATION_CONFIG -> {
-                    normalizationConfig = NormalizationConfig(
+                    val newConfig = NormalizationConfig(
                         mode = normalizeNormalizationMode(
                             it.getStringExtra(EXTRA_NORMALIZATION_MODE)
                         ),
                         manualVolume = it.getFloatExtra(EXTRA_MANUAL_VOLUME, 0.5f),
                         fixedLufs = it.getDoubleExtra(EXTRA_FIXED_LUFS, -27.0)
                     )
+                    val changed = newConfig != normalizationConfig
+                    normalizationConfig = newConfig
                     saveNormalizationConfig(this, normalizationConfig)
-                    Log.d(
-                        TAG,
-                        "Action: SET_NORMALIZATION_CONFIG mode=${normalizationConfig.mode} manual=${normalizationConfig.manualVolume} fixed=${normalizationConfig.fixedLufs}"
-                    )
+                    if (changed) {
+                        Log.i(
+                            TAG,
+                            "Normalization config changed: mode=${normalizationConfig.mode} manual=${normalizationConfig.manualVolume} fixed=${normalizationConfig.fixedLufs}"
+                        )
+                    }
                     val currentTrack = tracks.getOrNull(currentTrackIndex)
                     if (currentTrack != null) {
-                        applyTrackVolume(currentTrack)
+                        applyTrackVolume(currentTrack, log = changed)
                     }
                     Unit
                 }
@@ -746,12 +744,14 @@ class MusicPlayerService : Service() {
         return rawVolume.coerceIn(0.0, 1.0).toFloat()
     }
 
-    private fun applyTrackVolume(track: QueueSongInfo) {
+    private fun applyTrackVolume(track: QueueSongInfo, log: Boolean = true) {
         val volume = calculateTrackVolume(track)
-        Log.d(
-            TAG,
-            "applyTrackVolume: track=${track.name} mode=${normalizationConfig.mode} lufs=${track.lufs} volume=$volume"
-        )
+        if (log) {
+            Log.d(
+                TAG,
+                "applyTrackVolume: track=${track.name} mode=${normalizationConfig.mode} lufs=${track.lufs} volume=$volume"
+            )
+        }
         mediaPlayer?.setVolume(volume, volume)
     }
 
