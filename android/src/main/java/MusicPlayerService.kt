@@ -834,7 +834,24 @@ class MusicPlayerService : Service() {
 
         mediaPlayer = MediaPlayer().apply {
             try {
-                setDataSource(track.url)
+                val sourceUri = Uri.parse(track.url)
+                when (sourceUri.scheme?.lowercase()) {
+                    "content" -> {
+                        Log.i(TAG, "Using content URI data source for track=${track.name}")
+                        setDataSource(this@MusicPlayerService, sourceUri)
+                    }
+                    "file" -> {
+                        Log.i(TAG, "Using file URI data source for track=${track.name}")
+                        setDataSource(this@MusicPlayerService, sourceUri)
+                    }
+                    else -> {
+                        Log.i(
+                            TAG,
+                            "Using string data source for track=${track.name} scheme=${sourceUri.scheme ?: "none"}"
+                        )
+                        setDataSource(track.url)
+                    }
+                }
                 prepareStartTime = System.currentTimeMillis()
 
                 setOnPreparedListener { mp ->
