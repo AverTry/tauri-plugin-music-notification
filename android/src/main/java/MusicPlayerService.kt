@@ -289,6 +289,9 @@ class MusicPlayerService : Service() {
     private var lufsResolutionGeneration = 0L
     private var pauseAfterRunnable: Runnable? = null
     private var normalizationConfig = NormalizationConfig()
+    private var playTrackStartTime = 0L
+    private var prepareStartTime = 0L
+    private var playTrackCallStartTime = 0L
 
     private fun updateServiceLifetime() {
         if (!httpServerRunning && !musicPlayerActive) {
@@ -411,6 +414,8 @@ class MusicPlayerService : Service() {
                     updateServiceLifetime()
                 }
                 ACTION_PLAY -> {
+                    playTrackCallStartTime = System.currentTimeMillis()
+                    Log.i("KaulanPerf", "ACTION_PLAY received: track intent received")
                     Log.d(TAG, "Action: PLAY")
                     val url = it.getStringExtra(EXTRA_URL) ?: run {
                         Log.e(TAG, "URL is null, returning")
@@ -723,10 +728,17 @@ class MusicPlayerService : Service() {
                 manualVolume.toDouble()
             }
             else -> {
-                val minLufs = tracks
-                    .mapNotNull { it.lufs }
-                    .minOrNull()
-                    ?: return manualVolume
+                val defaultMinLufs = -29.0
+                var minLufs = defaultMinLufs
+                for (t in tracks) {
+                    if (t.lufs != null) {
+                        minLufs = Math.min(t.lufs, minLufs)
+                    }
+                }
+                // If no tracks have LUFS (all null), use manual volume
+                if (minLufs == defaultMinLufs && tracks.all { it.lufs == null }) {
+                    return manualVolume
+                }
                 Math.pow(10.0, (minLufs - trackLufs) / 20.0)
             }
         }
@@ -753,6 +765,7 @@ class MusicPlayerService : Service() {
         val resolutionGeneration = lufsResolutionGeneration
 
         Thread {
+            val lufsStart = System.currentTimeMillis()
             val precacheResult = requestPrecacheLufs(track)
             val resolvedTrack = if (precacheResult?.success == true && precacheResult.lufs != null) {
                 Log.d(TAG, "playTrack: resolved LUFS before playback for track=${track.name} lufs=${precacheResult.lufs}")
@@ -765,6 +778,8 @@ class MusicPlayerService : Service() {
             }
 
             handler.post {
+                val lufsElapsed = System.currentTimeMillis() - lufsStart
+                Log.i("KaulanPerf", "LUFS resolution: ${lufsElapsed}ms track=${track.name} resolved=${resolvedTrack.lufs != null}")
                 if (resolutionGeneration != lufsResolutionGeneration) {
                     Log.d(
                         TAG,
@@ -778,7 +793,9 @@ class MusicPlayerService : Service() {
     }
 
     private fun playTrackInternal(track: QueueSongInfo, artist: String = "Unknown Artist", album: String = "Unknown Album") {
+        playTrackStartTime = System.currentTimeMillis()
         Log.d(TAG, "========== playTrack called ==========")
+        Log.i("KaulanPerf", "playTrack start: track=${track.name}")
         Log.d(TAG, "Track: ${track.name} (${track.url}) currentTrackIndex=$currentTrackIndex queueSize=${tracks.size}")
 
         musicPlayerActive = true
@@ -818,6 +835,7 @@ class MusicPlayerService : Service() {
         mediaPlayer = MediaPlayer().apply {
             try {
                 setDataSource(track.url)
+                prepareStartTime = System.currentTimeMillis()
 
                 setOnPreparedListener { mp ->
                     if (mediaPlayer !== this || playbackGeneration != generation || currentUrl != track.url) {
@@ -828,6 +846,10 @@ class MusicPlayerService : Service() {
                         return@setOnPreparedListener
                     }
                     Log.d(TAG, "========== onPrepared called ==========")
+                    val prepareElapsed = if (prepareStartTime > 0) System.currentTimeMillis() - prepareStartTime else -1L
+                    val playTrackElapsed = if (playTrackStartTime > 0) System.currentTimeMillis() - playTrackStartTime else -1L
+                    val intentElapsed = if (playTrackCallStartTime > 0) System.currentTimeMillis() - playTrackCallStartTime else -1L
+                    Log.i("KaulanPerf", "onPrepared: prepareAsync=${prepareElapsed}ms playTrackInternal=${playTrackElapsed}ms fromIntent=${intentElapsed}ms track=${track.name}")
                     isPrepared = true
                     applyTrackVolume(track)
                     mediaSession.setMetadata(
