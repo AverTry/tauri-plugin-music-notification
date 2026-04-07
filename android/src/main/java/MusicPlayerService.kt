@@ -643,23 +643,31 @@ class MusicPlayerService : Service() {
 
     private fun buildPrecacheUrl(track: QueueSongInfo): String? {
         if (track.id <= 0L) {
+            Log.w(TAG, "buildPrecacheUrl: missing valid track id for track=${track.name} id=${track.id}")
             return null
         }
 
-        val parsed = Uri.parse(track.url)
+        val precacheBase = if (track.path.isNotBlank()) track.path else track.url
+        val parsed = Uri.parse(precacheBase)
         val path = parsed.path ?: return null
         val musicMarker = "/music/id/${track.id}"
         val markerIndex = path.indexOf(musicMarker)
         if (markerIndex < 0) {
+            Log.w(
+                TAG,
+                "buildPrecacheUrl: could not derive precache URL from track=${track.name} id=${track.id} path=${track.path} url=${track.url}"
+            )
             return null
         }
 
         val prefixPath = path.substring(0, markerIndex)
-        return parsed.buildUpon()
+        val precacheUrl = parsed.buildUpon()
             .path("${prefixPath}/music/${track.id}/precache-lufs")
             .clearQuery()
             .build()
             .toString()
+        Log.d(TAG, "buildPrecacheUrl: track=${track.name} source=$precacheBase precacheUrl=$precacheUrl")
+        return precacheUrl
     }
 
     private fun requestPrecacheLufs(track: QueueSongInfo): PrecacheLufsResult? {
@@ -667,6 +675,7 @@ class MusicPlayerService : Service() {
         var connection: HttpURLConnection? = null
 
         return try {
+            Log.d(TAG, "requestPrecacheLufs: sending request for track=${track.name} id=${track.id} url=$precacheUrl")
             connection = URL(precacheUrl).openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.connectTimeout = 3000
@@ -682,15 +691,24 @@ class MusicPlayerService : Service() {
 
             val body = stream.bufferedReader().use { it.readText() }
             if (body.isBlank()) {
+                Log.d(
+                    TAG,
+                    "requestPrecacheLufs: blank response for track=${track.name} id=${track.id} statusCode=$statusCode"
+                )
                 return PrecacheLufsResult(statusCode in 200..299, null, null)
             }
 
             val json = JSONObject(body)
-            PrecacheLufsResult(
+            val result = PrecacheLufsResult(
                 success = json.optBoolean("success", statusCode in 200..299),
                 lufs = if (json.has("lufs") && !json.isNull("lufs")) json.optDouble("lufs") else null,
                 cached = if (json.has("cached") && !json.isNull("cached")) json.optBoolean("cached") else null
             )
+            Log.d(
+                TAG,
+                "requestPrecacheLufs: response for track=${track.name} id=${track.id} statusCode=$statusCode success=${result.success} lufs=${result.lufs} cached=${result.cached}"
+            )
+            result
         } catch (e: Exception) {
             Log.w(TAG, "requestPrecacheLufs failed for track=${track.name}", e)
             null
@@ -750,6 +768,10 @@ class MusicPlayerService : Service() {
         Thread {
             try {
                 for (attempt in 0..LUFS_POLL_MAX_ATTEMPTS) {
+                    Log.d(
+                        TAG,
+                        "resolveTrackLufsAsync: attempt=$attempt track=${track.name} id=${track.id} reason=$reason retryUntilResolved=$retryUntilResolved"
+                    )
                     val result = requestPrecacheLufs(track)
                     if (result?.success == true && result.lufs != null) {
                         handler.post {
@@ -769,6 +791,10 @@ class MusicPlayerService : Service() {
                     }
 
                     if (!retryUntilResolved || result?.cached != false || attempt == LUFS_POLL_MAX_ATTEMPTS) {
+                        Log.d(
+                            TAG,
+                            "resolveTrackLufsAsync: stopping track=${track.name} id=${track.id} reason=$reason attempt=$attempt cached=${result?.cached} lufs=${result?.lufs}"
+                        )
                         return@Thread
                     }
 
