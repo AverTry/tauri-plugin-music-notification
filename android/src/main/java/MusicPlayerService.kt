@@ -23,6 +23,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Collections
 
 class MusicPlayerService : Service() {
 
@@ -33,6 +34,8 @@ class MusicPlayerService : Service() {
         private const val PREFS_NAME = "music_notification"
         private const val PREF_SESSION = "playback_session"
         private const val PREF_NORMALIZATION = "normalization_config"
+        private const val LUFS_POLL_DELAY_MS = 1000L
+        private const val LUFS_POLL_MAX_ATTEMPTS = 8
 
         const val ACTION_PLAY = "com.plugin.music_notification.PLAY"
         const val ACTION_PAUSE = "com.plugin.music_notification.PAUSE"
@@ -292,6 +295,7 @@ class MusicPlayerService : Service() {
     private var playTrackStartTime = 0L
     private var prepareStartTime = 0L
     private var playTrackCallStartTime = 0L
+    private val lufsRequestsInFlight = Collections.synchronizedSet(mutableSetOf<Long>())
 
     private fun updateServiceLifetime() {
         if (!httpServerRunning && !musicPlayerActive) {
@@ -707,6 +711,91 @@ class MusicPlayerService : Service() {
         return updatedTrack
     }
 
+    private fun getNextTrackForPrecache(): QueueSongInfo? {
+        if (currentTrackIndex !in tracks.indices || tracks.isEmpty()) {
+            return null
+        }
+
+        val nextIndex = if (playMode == "loop") {
+            currentTrackIndex
+        } else if (currentTrackIndex >= tracks.lastIndex) {
+            0
+        } else {
+            currentTrackIndex + 1
+        }
+
+        if (nextIndex !in tracks.indices || nextIndex == currentTrackIndex) {
+            return null
+        }
+
+        val nextTrack = tracks[nextIndex]
+        return if (nextTrack.lufs == null) nextTrack else null
+    }
+
+    private fun resolveTrackLufsAsync(
+        track: QueueSongInfo,
+        reason: String,
+        retryUntilResolved: Boolean,
+        applyVolumeIfCurrent: Boolean
+    ) {
+        if (track.id <= 0L || track.lufs != null) {
+            return
+        }
+
+        if (!lufsRequestsInFlight.add(track.id)) {
+            Log.d(TAG, "resolveTrackLufsAsync: skipping duplicate request track=${track.name} reason=$reason")
+            return
+        }
+
+        Thread {
+            try {
+                for (attempt in 0..LUFS_POLL_MAX_ATTEMPTS) {
+                    val result = requestPrecacheLufs(track)
+                    if (result?.success == true && result.lufs != null) {
+                        handler.post {
+                            val updatedTrack = patchTrackLufs(track, result.lufs)
+                            Log.d(
+                                TAG,
+                                "resolveTrackLufsAsync: resolved track=${track.name} reason=$reason attempt=$attempt lufs=${result.lufs}"
+                            )
+                            if (applyVolumeIfCurrent) {
+                                val currentTrack = tracks.getOrNull(currentTrackIndex)
+                                if (currentTrack?.id == updatedTrack.id && isPrepared) {
+                                    applyTrackVolume(updatedTrack)
+                                }
+                            }
+                        }
+                        return@Thread
+                    }
+
+                    if (!retryUntilResolved || result?.cached != false || attempt == LUFS_POLL_MAX_ATTEMPTS) {
+                        return@Thread
+                    }
+
+                    try {
+                        Thread.sleep(LUFS_POLL_DELAY_MS)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return@Thread
+                    }
+                }
+            } finally {
+                lufsRequestsInFlight.remove(track.id)
+            }
+        }.start()
+    }
+
+    private fun precacheNextTrack() {
+        val nextTrack = getNextTrackForPrecache() ?: return
+        Log.d(TAG, "precacheNextTrack: scheduling LUFS pre-cache for next track=${nextTrack.name}")
+        resolveTrackLufsAsync(
+            track = nextTrack,
+            reason = "next",
+            retryUntilResolved = true,
+            applyVolumeIfCurrent = false
+        )
+    }
+
     private fun normalizeNormalizationMode(mode: String?): String {
         return when (mode) {
             "manual", "fixed" -> mode
@@ -756,40 +845,17 @@ class MusicPlayerService : Service() {
     }
 
     fun playTrack(track: QueueSongInfo, artist: String = "Unknown Artist", album: String = "Unknown Album") {
-        if (track.lufs != null) {
-            playTrackInternal(track, artist, album)
-            return
-        }
-
         lufsResolutionGeneration += 1
-        val resolutionGeneration = lufsResolutionGeneration
+        playTrackInternal(track, artist, album)
 
-        Thread {
-            val lufsStart = System.currentTimeMillis()
-            val precacheResult = requestPrecacheLufs(track)
-            val resolvedTrack = if (precacheResult?.success == true && precacheResult.lufs != null) {
-                Log.d(TAG, "playTrack: resolved LUFS before playback for track=${track.name} lufs=${precacheResult.lufs}")
-                patchTrackLufs(track, precacheResult.lufs)
-            } else {
-                if (precacheResult?.cached == false) {
-                    Log.d(TAG, "playTrack: LUFS calculation started in background for track=${track.name}")
-                }
-                track
-            }
-
-            handler.post {
-                val lufsElapsed = System.currentTimeMillis() - lufsStart
-                Log.i("KaulanPerf", "LUFS resolution: ${lufsElapsed}ms track=${track.name} resolved=${resolvedTrack.lufs != null}")
-                if (resolutionGeneration != lufsResolutionGeneration) {
-                    Log.d(
-                        TAG,
-                        "playTrack: skipping stale LUFS resolution result for track=${track.name} generation=$resolutionGeneration currentGeneration=$lufsResolutionGeneration"
-                    )
-                    return@post
-                }
-                playTrackInternal(resolvedTrack, artist, album)
-            }
-        }.start()
+        if (track.lufs == null) {
+            resolveTrackLufsAsync(
+                track = track,
+                reason = "current",
+                retryUntilResolved = false,
+                applyVolumeIfCurrent = true
+            )
+        }
     }
 
     private fun playTrackInternal(track: QueueSongInfo, artist: String = "Unknown Artist", album: String = "Unknown Album") {
@@ -879,6 +945,7 @@ class MusicPlayerService : Service() {
                     )
                     persistSession(isPlayingOverride = false)
                     resumeMusic()
+                    precacheNextTrack()
                 }
 
                 setOnErrorListener { _, what, extra ->
