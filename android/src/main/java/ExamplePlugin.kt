@@ -276,6 +276,27 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
     }
 
     @Command
+    fun seekAndPlay(invoke: Invoke) {
+        try {
+            val args = invoke.parseArgs(SeekArgs::class.java)
+            Log.d(TAG, "Command seekAndPlay(): dispatching ACTION_SEEK_AND_PLAY to position=${args.position}")
+            val serviceIntent = Intent(activity, MusicPlayerService::class.java).apply {
+                action = MusicPlayerService.ACTION_SEEK_AND_PLAY
+                putExtra(MusicPlayerService.EXTRA_POSITION, args.position)
+            }
+            activity.startService(serviceIntent)
+
+            val ret = JSObject()
+            ret.put("success", true)
+            invoke.resolve(ret)
+        } catch (e: Exception) {
+            val ret = JSObject()
+            ret.put("success", false)
+            invoke.resolve(ret)
+        }
+    }
+
+    @Command
     fun getState(invoke: Invoke) {
         try {
             val service = MusicPlayerService.instance
@@ -327,7 +348,8 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
                     MusicPlayerService.SessionSnapshot(
                         queue = MusicPlayerService.PlayingQueueSnapshot(songs, args.queue.currentIndex),
                         runtime = MusicPlayerService.PlaybackRuntimeSnapshot(false, 0L, 0L),
-                        playMode = playMode
+                        playMode = playMode,
+                        currentSongId = songs.getOrNull(args.queue.currentIndex ?: 0)?.id
                     )
                 )
             }
@@ -374,6 +396,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
             ret.put("queue", queue)
             ret.put("runtime", runtime)
             ret.put("playMode", snapshot.playMode)
+            ret.put("currentSongId", snapshot.currentSongId)
             invoke.resolve(ret)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get playback session", e)
@@ -388,6 +411,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
                 put("durationMs", 0)
             })
             ret.put("playMode", "sequential")
+            ret.put("currentSongId", null)
             invoke.resolve(ret)
         }
     }

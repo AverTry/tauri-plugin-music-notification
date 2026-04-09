@@ -10,6 +10,7 @@ permissions = [
   "allow-next",
   "allow-previous",
   "allow-seek",
+  "allow-seek-and-play",
   "allow-get-state",
   "allow-start-service",
   "allow-stop-service",

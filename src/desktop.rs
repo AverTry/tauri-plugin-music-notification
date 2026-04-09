@@ -66,6 +66,10 @@ impl<R: Runtime> MusicNotification<R> {
         Ok(EmptyResponse { success: false })
     }
 
+    pub fn seek_and_play(&self, _position: i64) -> crate::Result<EmptyResponse> {
+        Ok(EmptyResponse { success: false })
+    }
+
     pub fn get_state(&self) -> crate::Result<PlaybackState> {
         Ok(PlaybackState {
             is_playing: false,
@@ -96,6 +100,7 @@ impl<R: Runtime> MusicNotification<R> {
                 duration_ms: 0,
             },
             play_mode: PlayMode::Sequential,
+            current_song_id: None,
         })
     }
 

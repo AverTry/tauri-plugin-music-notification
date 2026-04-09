@@ -46,6 +46,7 @@ export interface PlaybackSession {
   queue: PlayingQueue;
   runtime: PlaybackRuntime;
   playMode: PlayMode;
+  currentSongId: number | null;
 }
 
 export async function play(options: PlayOptions): Promise<{ success: boolean; message?: string }> {
@@ -84,6 +85,12 @@ export async function previous(): Promise<{ success: boolean }> {
 
 export async function seek(position: number): Promise<{ success: boolean }> {
   return await invoke<{ success: boolean }>('plugin:music-notification|seek', {
+    position,
+  });
+}
+
+export async function seekAndPlay(position: number): Promise<{ success: boolean }> {
+  return await invoke<{ success: boolean }>('plugin:music-notification|seek_and_play', {
     position,
   });
 }

@@ -59,6 +59,14 @@ pub(crate) async fn seek<R: Runtime>(app: AppHandle<R>, position: i64) -> Result
 }
 
 #[command]
+pub(crate) async fn seek_and_play<R: Runtime>(
+    app: AppHandle<R>,
+    position: i64,
+) -> Result<EmptyResponse> {
+    app.music_notification().seek_and_play(position)
+}
+
+#[command]
 pub(crate) async fn get_state<R: Runtime>(app: AppHandle<R>) -> Result<PlaybackState> {
     app.music_notification().get_state()
 }

@@ -92,6 +92,16 @@ impl<R: Runtime> MusicNotification<R> {
             .map_err(Into::into)
     }
 
+    pub fn seek_and_play(&self, position: i64) -> crate::Result<EmptyResponse> {
+        #[derive(serde::Serialize)]
+        struct SeekAndPlayRequest {
+            position: i64,
+        }
+        self.0
+            .run_mobile_plugin("seekAndPlay", SeekAndPlayRequest { position })
+            .map_err(Into::into)
+    }
+
     pub fn get_state(&self) -> crate::Result<PlaybackState> {
         self.0
             .run_mobile_plugin("getState", EmptyRequest {})

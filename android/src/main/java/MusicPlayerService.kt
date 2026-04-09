@@ -45,6 +45,7 @@ class MusicPlayerService : Service() {
         const val ACTION_NEXT = "com.plugin.music_notification.NEXT"
         const val ACTION_PREVIOUS = "com.plugin.music_notification.PREVIOUS"
         const val ACTION_SEEK = "com.plugin.music_notification.SEEK"
+        const val ACTION_SEEK_AND_PLAY = "com.plugin.music_notification.SEEK_AND_PLAY"
         const val ACTION_START_SERVICE = "com.plugin.music_notification.START_SERVICE"
         const val ACTION_STOP_SERVICE = "com.plugin.music_notification.STOP_SERVICE"
         const val ACTION_SET_VOLUME = "com.plugin.music_notification.SET_VOLUME"
@@ -92,7 +93,8 @@ class MusicPlayerService : Service() {
             return SessionSnapshot(
                 queue = PlayingQueueSnapshot(emptyList(), null),
                 runtime = PlaybackRuntimeSnapshot(false, 0L, 0L),
-                playMode = "sequential"
+                playMode = "sequential",
+                currentSongId = null
             )
         }
 
@@ -180,7 +182,12 @@ class MusicPlayerService : Service() {
                     positionMs = runtimeJson.optLong("positionMs", 0L),
                     durationMs = runtimeJson.optLong("durationMs", 0L)
                 ),
-                playMode = json.optString("playMode", "sequential")
+                playMode = json.optString("playMode", "sequential"),
+                currentSongId = if (json.has("currentSongId") && !json.isNull("currentSongId")) {
+                    json.optLong("currentSongId")
+                } else {
+                    null
+                }
             )
         }
 
@@ -218,6 +225,11 @@ class MusicPlayerService : Service() {
             json.put("queue", queueJson)
             json.put("runtime", runtimeJson)
             json.put("playMode", snapshot.playMode)
+            if (snapshot.currentSongId == null) {
+                json.put("currentSongId", JSONObject.NULL)
+            } else {
+                json.put("currentSongId", snapshot.currentSongId)
+            }
             return json
         }
     }
@@ -244,7 +256,8 @@ class MusicPlayerService : Service() {
     data class SessionSnapshot(
         val queue: PlayingQueueSnapshot,
         val runtime: PlaybackRuntimeSnapshot,
-        val playMode: String
+        val playMode: String,
+        val currentSongId: Long?
     )
 
     data class PrecacheLufsResult(
@@ -282,6 +295,36 @@ class MusicPlayerService : Service() {
         playTrack(tracks[currentTrackIndex])
     }
 
+    fun seekAndPlay(positionMs: Long) {
+        val normalizedPosition = positionMs.coerceAtLeast(0L)
+        pendingSeekPositionMs = normalizedPosition
+        Log.d(
+            TAG,
+            "seekAndPlay: positionMs=$normalizedPosition mediaPlayer=${mediaPlayer != null} isPrepared=$isPrepared currentTrackIndex=$currentTrackIndex queueSize=${tracks.size}"
+        )
+
+        val player = mediaPlayer
+        if (player != null && isPrepared) {
+            val clampedPosition = normalizedPosition.coerceAtMost(player.duration.toLong()).toInt()
+            player.seekTo(clampedPosition)
+            pendingSeekPositionMs = null
+            resumeMusic()
+            persistSession(isPlayingOverride = true)
+            updatePlaybackState()
+            return
+        }
+
+        if (currentTrackIndex in tracks.indices) {
+            if (player == null) {
+                playCurrentTrack()
+            }
+            return
+        }
+
+        Log.w(TAG, "seekAndPlay: no active track available for resume")
+        pendingSeekPositionMs = null
+    }
+
     fun stopFromNotification() {
         stopMusic(clearQueue = false)
     }
@@ -295,6 +338,7 @@ class MusicPlayerService : Service() {
     private var playTrackStartTime = 0L
     private var prepareStartTime = 0L
     private var playTrackCallStartTime = 0L
+    private var pendingSeekPositionMs: Long? = null
     private val lufsRequestsInFlight = Collections.synchronizedSet(mutableSetOf<Long>())
 
     private fun updateServiceLifetime() {
@@ -453,6 +497,11 @@ class MusicPlayerService : Service() {
                     persistSession(isPlayingOverride = mediaPlayer?.isPlaying)
                     updatePlaybackState()
                 }
+                ACTION_SEEK_AND_PLAY -> {
+                    val position = it.getLongExtra(EXTRA_POSITION, 0)
+                    Log.d(TAG, "onStartCommand#${startCommandCount}: ACTION_SEEK_AND_PLAY to $position")
+                    seekAndPlay(position)
+                }
                 ACTION_SET_VOLUME -> {
                     val volume = it.getFloatExtra(EXTRA_VOLUME, 1.0f)
                     Log.d(TAG, "Action: SET_VOLUME to $volume")
@@ -531,7 +580,7 @@ class MusicPlayerService : Service() {
         Log.d(TAG, "restorePersistedSession: queueSize=${snapshot.queue.songs.size}, " +
             "currentIndex=${snapshot.queue.currentIndex}, isPlaying=${snapshot.runtime.isPlaying}, " +
             "positionMs=${snapshot.runtime.positionMs}, playMode=${snapshot.playMode}, " +
-            "firstSong=${snapshot.queue.songs.firstOrNull()?.name}")
+            "currentSongId=${snapshot.currentSongId}, firstSong=${snapshot.queue.songs.firstOrNull()?.name}")
         tracks = snapshot.queue.songs.toMutableList()
         currentTrackIndex = when {
             tracks.isEmpty() -> -1
@@ -563,7 +612,8 @@ class MusicPlayerService : Service() {
         return SessionSnapshot(
             queue = PlayingQueueSnapshot(tracks.toList(), currentIndex),
             runtime = buildRuntimeSnapshot(),
-            playMode = playMode
+            playMode = playMode,
+            currentSongId = tracks.getOrNull(currentTrackIndex)?.id
         )
     }
 
@@ -605,7 +655,8 @@ class MusicPlayerService : Service() {
                     currentIndex = if (currentTrackIndex in tracks.indices) currentTrackIndex else null
                 ),
                 runtime = runtime,
-                playMode = playMode
+                playMode = playMode,
+                currentSongId = tracks.getOrNull(currentTrackIndex)?.id
             )
         )
     }
@@ -894,6 +945,11 @@ class MusicPlayerService : Service() {
 
         if (currentUrl == track.url && mediaPlayer != null && isPrepared) {
             applyTrackVolume(track)
+            pendingSeekPositionMs?.let { pendingPosition ->
+                val clampedPosition = pendingPosition.coerceAtMost(mediaPlayer?.duration?.toLong() ?: pendingPosition).toInt()
+                mediaPlayer?.seekTo(clampedPosition)
+                pendingSeekPositionMs = null
+            }
             Log.d(TAG, "Same URL already prepared, resuming")
             resumeMusic()
             return
@@ -960,6 +1016,12 @@ class MusicPlayerService : Service() {
                     val intentElapsed = if (playTrackCallStartTime > 0) System.currentTimeMillis() - playTrackCallStartTime else -1L
                     Log.i("KaulanPerf", "onPrepared: prepareAsync=${prepareElapsed}ms playTrackInternal=${playTrackElapsed}ms fromIntent=${intentElapsed}ms track=${track.name}")
                     isPrepared = true
+                    pendingSeekPositionMs?.let { pendingPosition ->
+                        val clampedPosition = pendingPosition.coerceAtMost(mp.duration.toLong()).toInt()
+                        Log.d(TAG, "Applying pending seek in onPrepared: $clampedPosition for track=${track.name}")
+                        mp.seekTo(clampedPosition)
+                        pendingSeekPositionMs = null
+                    }
                     applyTrackVolume(track)
                     mediaSession.setMetadata(
                         MediaMetadataCompat.Builder()

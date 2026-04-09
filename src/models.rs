@@ -99,6 +99,7 @@ pub struct PlaybackSession {
     pub queue: PlayingQueue,
     pub runtime: PlaybackRuntime,
     pub play_mode: PlayMode,
+    pub current_song_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

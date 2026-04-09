@@ -13,6 +13,7 @@ Default permissions for the plugin
 - `allow-next`
 - `allow-previous`
 - `allow-seek`
+- `allow-seek-and-play`
 - `allow-get-state`
 - `allow-start-service`
 - `allow-stop-service`
@@ -315,6 +316,32 @@ Enables the seek command without any pre-configured scope.
 <td>
 
 Denies the seek command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-seek-and-play`
+
+</td>
+<td>
+
+Enables the seek_and_play command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-seek-and-play`
+
+</td>
+<td>
+
+Denies the seek_and_play command without any pre-configured scope.
 
 </td>
 </tr>

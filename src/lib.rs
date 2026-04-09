@@ -48,6 +48,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::next,
             commands::previous,
             commands::seek,
+            commands::seek_and_play,
             commands::get_state,
             commands::set_playing_queue,
             commands::get_playback_session,

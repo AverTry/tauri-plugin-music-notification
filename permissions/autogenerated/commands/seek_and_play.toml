@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-seek-and-play"
+description = "Enables the seek_and_play command without any pre-configured scope."
+commands.allow = ["seek_and_play"]
+
+[[permission]]
+identifier = "deny-seek-and-play"
+description = "Denies the seek_and_play command without any pre-configured scope."
+commands.deny = ["seek_and_play"]
