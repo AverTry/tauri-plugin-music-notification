@@ -3,6 +3,7 @@ package com.plugin.music_notification
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -369,6 +370,20 @@ class MusicPlayerService : Service() {
         handler = Handler(Looper.getMainLooper())
         normalizationConfig = loadNormalizationConfig(this)
         mediaSession = MediaSessionCompat(this, "MusicPlayerService")
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        if (launchIntent != null) {
+            val sessionActivity = PendingIntent.getActivity(
+                this,
+                0,
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            mediaSession.setSessionActivity(sessionActivity)
+        } else {
+            Log.w(TAG, "Failed to resolve launch intent for package $packageName")
+        }
         Log.d(TAG, "onCreate: MusicPlayerService created, restoring persisted session")
         restorePersistedSession()
 
