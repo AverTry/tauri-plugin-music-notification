@@ -11,6 +11,7 @@ A Tauri plugin for Android that provides music playback notifications with media
 - 🔊 Volume control (app-only, not system volume)
 - 📊 Get current playback state
 - 🔔 Native Android media notification with controls
+- 🖼️ Notification artwork via `coverUrl` for play requests and queue items
 - 🎨 Lock screen controls support
 - 🌐 HTTP Server integration via trait-based API
 
@@ -194,7 +195,7 @@ Support varies by Android version and device hardware.
 ### JavaScript/TypeScript
 
 ```typescript
-import { play, pause, resume, stop, next, previous, seek, getState, setVolume } from 'music-notification-api';
+import { play, pause, resume, stop, next, previous, seek, getState, setPlayingQueue, setVolume } from 'music-notification-api';
 
 // Play music
 await play({
@@ -204,6 +205,24 @@ await play({
   album: "Album Name",
   coverUrl: "https://example.com/song-cover.jpg"
 });
+
+// Queue playback with persisted artwork
+await setPlayingQueue(
+  {
+    songs: [
+      {
+        id: 1,
+        name: "Song Title",
+        path: "",
+        url: "https://example.com/song.mp3",
+        lufs: null,
+        coverUrl: "https://example.com/song-cover.jpg"
+      }
+    ],
+    currentIndex: 0
+  },
+  "sequential"
+);
 
 // Pause playback
 await pause();
@@ -247,6 +266,11 @@ Starts playing music from a URL.
 - `coverUrl` (string, optional): Artwork URL for Android notifications. Supports `http://`, `https://`, `content://`, and `file://`
 
 **Returns:** `Promise<{ success: boolean; message?: string }>`
+
+**Behavior notes:**
+- `coverUrl` updates Android media-session metadata and the notification large icon.
+- Queue items can also carry `coverUrl`, so artwork survives `next()`, `previous()`, and restored playback sessions.
+- If artwork loading fails, playback continues and the notification falls back to text-only metadata.
 
 ### `pause()`
 
