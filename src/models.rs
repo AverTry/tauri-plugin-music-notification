@@ -19,6 +19,7 @@ pub struct PlayRequest {
     pub title: Option<String>,
     pub artist: Option<String>,
     pub album: Option<String>,
+    pub cover_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -76,6 +77,7 @@ pub struct QueueSong {
     pub path: String,
     pub url: String,
     pub lufs: Option<f64>,
+    pub cover_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

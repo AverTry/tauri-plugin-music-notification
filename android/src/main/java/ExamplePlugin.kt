@@ -24,6 +24,7 @@ class PlayArgs {
   var title: String? = null
   var artist: String? = null
   var album: String? = null
+  var coverUrl: String? = null
 }
 
 @InvokeArg
@@ -60,6 +61,7 @@ class QueueSongArgs {
   var path: String = ""
   var url: String = ""
   var lufs: Double? = null
+  var coverUrl: String? = null
 }
 
 @InvokeArg
@@ -120,6 +122,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
                 putExtra(MusicPlayerService.EXTRA_TITLE, args.title ?: "Unknown Title")
                 putExtra(MusicPlayerService.EXTRA_ARTIST, args.artist ?: "Unknown Artist")
                 putExtra(MusicPlayerService.EXTRA_ALBUM, args.album ?: "Unknown Album")
+                putExtra(MusicPlayerService.EXTRA_COVER_URL, args.coverUrl)
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -334,7 +337,8 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
                     name = it.name,
                     path = it.path,
                     url = it.url,
-                    lufs = it.lufs
+                    lufs = it.lufs,
+                    coverUrl = it.coverUrl
                 )
             }
             val playMode = args.playMode ?: "sequential"
@@ -383,6 +387,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
                 songObj.put("path", song.path)
                 songObj.put("url", song.url)
                 songObj.put("lufs", song.lufs)
+                songObj.put("coverUrl", song.coverUrl)
                 songs.put(songObj)
             }
             queue.put("songs", songs)

@@ -201,7 +201,8 @@ await play({
   url: "https://example.com/song.mp3",
   title: "Song Title",
   artist: "Artist Name",
-  album: "Album Name"
+  album: "Album Name",
+  coverUrl: "https://example.com/song-cover.jpg"
 });
 
 // Pause playback
@@ -243,6 +244,7 @@ Starts playing music from a URL.
 - `title` (string, optional): Song title
 - `artist` (string, optional): Artist name
 - `album` (string, optional): Album name
+- `coverUrl` (string, optional): Artwork URL for Android notifications. Supports `http://`, `https://`, `content://`, and `file://`
 
 **Returns:** `Promise<{ success: boolean; message?: string }>`
 

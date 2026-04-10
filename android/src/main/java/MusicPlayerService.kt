@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
@@ -21,6 +23,8 @@ import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import androidx.media.session.MediaButtonReceiver
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.FileInputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Collections
@@ -55,6 +59,7 @@ class MusicPlayerService : Service() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_ARTIST = "artist"
         const val EXTRA_ALBUM = "album"
+        const val EXTRA_COVER_URL = "coverUrl"
         const val EXTRA_POSITION = "position"
         const val EXTRA_DELAY_MS = "delayMs"
         const val EXTRA_VOLUME = "volume"
@@ -163,7 +168,8 @@ class MusicPlayerService : Service() {
                         name = songJson.optString("name", ""),
                         path = songJson.optString("path", ""),
                         url = songJson.optString("url", ""),
-                        lufs = if (songJson.has("lufs") && !songJson.isNull("lufs")) songJson.optDouble("lufs") else null
+                        lufs = if (songJson.has("lufs") && !songJson.isNull("lufs")) songJson.optDouble("lufs") else null,
+                        coverUrl = songJson.optString("coverUrl", "").ifBlank { null }
                     )
                 )
             }
@@ -206,6 +212,11 @@ class MusicPlayerService : Service() {
                 } else {
                     songJson.put("lufs", song.lufs)
                 }
+                if (song.coverUrl == null) {
+                    songJson.put("coverUrl", JSONObject.NULL)
+                } else {
+                    songJson.put("coverUrl", song.coverUrl)
+                }
                 songsJson.put(songJson)
             }
 
@@ -239,7 +250,8 @@ class MusicPlayerService : Service() {
         val name: String,
         val path: String,
         val url: String,
-        val lufs: Double?
+        val lufs: Double?,
+        val coverUrl: String?
     )
 
     data class PlayingQueueSnapshot(
@@ -339,6 +351,8 @@ class MusicPlayerService : Service() {
     private var prepareStartTime = 0L
     private var playTrackCallStartTime = 0L
     private var pendingSeekPositionMs: Long? = null
+    private var currentArtworkBitmap: Bitmap? = null
+    private var artworkGeneration = 0L
     private val lufsRequestsInFlight = Collections.synchronizedSet(mutableSetOf<Long>())
 
     private fun updateServiceLifetime() {
@@ -466,7 +480,8 @@ class MusicPlayerService : Service() {
                     val title = it.getStringExtra(EXTRA_TITLE) ?: "Unknown Title"
                     val artist = it.getStringExtra(EXTRA_ARTIST) ?: "Unknown Artist"
                     val album = it.getStringExtra(EXTRA_ALBUM) ?: "Unknown Album"
-                    playTrackByUrl(url, title, artist, album)
+                    val coverUrl = it.getStringExtra(EXTRA_COVER_URL)
+                    playTrackByUrl(url, title, artist, album, coverUrl)
                 }
                 ACTION_PAUSE -> pauseMusic()
                 ACTION_PAUSE_AFTER -> {
@@ -596,12 +611,9 @@ class MusicPlayerService : Service() {
         // Set media session metadata so notification shows the restored track info
         if (currentTrackIndex in tracks.indices) {
             val track = tracks[currentTrackIndex]
-            mediaSession.setMetadata(
-                MediaMetadataCompat.Builder()
-                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.name)
-                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, snapshot.runtime.durationMs)
-                    .build()
-            )
+            currentArtworkBitmap = null
+            applyTrackMetadata(track, "Unknown Artist", "Unknown Album", snapshot.runtime.durationMs, null)
+            loadArtworkForTrackAsync(track, "Unknown Artist", "Unknown Album", snapshot.runtime.durationMs)
             Log.d(TAG, "restorePersistedSession: set metadata for ${track.name}, durationMs=${snapshot.runtime.durationMs}")
         }
         updatePlaybackState()
@@ -669,12 +681,13 @@ class MusicPlayerService : Service() {
         }
     }
 
-    private fun playTrackByUrl(url: String, title: String, artist: String, album: String) {
+    private fun playTrackByUrl(url: String, title: String, artist: String, album: String, coverUrl: String?) {
         val queueIndex = tracks.indexOfFirst { it.url == url }
         if (queueIndex >= 0) {
             Log.d(TAG, "playTrackByUrl: matched queueIndex=$queueIndex title=${tracks[queueIndex].name}")
             currentTrackIndex = queueIndex
-            val track = tracks[queueIndex]
+            val track = tracks[queueIndex].copy(coverUrl = coverUrl ?: tracks[queueIndex].coverUrl)
+            tracks[queueIndex] = track
             playTrack(track, artist, album)
             return
         }
@@ -684,7 +697,8 @@ class MusicPlayerService : Service() {
             name = title,
             path = "",
             url = url,
-            lufs = null
+            lufs = null,
+            coverUrl = coverUrl
         )
         tracks = mutableListOf(fallbackTrack)
         currentTrackIndex = 0
@@ -921,6 +935,127 @@ class MusicPlayerService : Service() {
         mediaPlayer?.setVolume(volume, volume)
     }
 
+    private fun applyTrackMetadata(
+        track: QueueSongInfo,
+        artist: String,
+        album: String,
+        durationMs: Long,
+        artwork: Bitmap?
+    ) {
+        val metadataBuilder = MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.name)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
+
+        artwork?.let {
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, it)
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it)
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, it)
+        }
+
+        mediaSession.setMetadata(metadataBuilder.build())
+        updateNotification()
+    }
+
+    private fun clearArtworkState() {
+        currentArtworkBitmap = null
+        artworkGeneration += 1
+    }
+
+    private fun loadArtworkForTrackAsync(
+        track: QueueSongInfo,
+        artist: String,
+        album: String,
+        durationMs: Long
+    ) {
+        val coverUrl = track.coverUrl?.trim()
+        if (coverUrl.isNullOrEmpty()) {
+            currentArtworkBitmap = null
+            applyTrackMetadata(track, artist, album, durationMs, null)
+            return
+        }
+
+        val generation = artworkGeneration
+        Thread {
+            val artwork = try {
+                loadArtworkBitmap(coverUrl)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to load artwork for track=${track.name} coverUrl=$coverUrl", e)
+                null
+            }
+
+            handler.post {
+                val isCurrentTrack = currentTrackIndex in tracks.indices &&
+                    tracks[currentTrackIndex].url == track.url
+                if (generation != artworkGeneration || !isCurrentTrack) {
+                    Log.d(TAG, "Ignoring stale artwork result for track=${track.name}")
+                    return@post
+                }
+
+                currentArtworkBitmap = artwork
+                applyTrackMetadata(track, artist, album, durationMs, artwork)
+            }
+        }.start()
+    }
+
+    private fun loadArtworkBitmap(coverUrl: String): Bitmap? {
+        val parsed = Uri.parse(coverUrl)
+        val scheme = parsed.scheme?.lowercase()
+
+        val bitmap = when (scheme) {
+            "http", "https" -> loadArtworkBitmapFromNetwork(coverUrl)
+            "content" -> contentResolver.openInputStream(parsed)?.use(::decodeArtworkBitmap)
+            "file" -> {
+                val filePath = parsed.path ?: return null
+                FileInputStream(filePath).use(::decodeArtworkBitmap)
+            }
+            else -> {
+                Log.w(TAG, "Unsupported artwork URI scheme: ${scheme ?: "none"} url=$coverUrl")
+                null
+            }
+        }
+
+        return bitmap?.let(::resizeArtworkBitmap)
+    }
+
+    private fun loadArtworkBitmapFromNetwork(coverUrl: String): Bitmap? {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = URL(coverUrl).openConnection() as HttpURLConnection
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            connection.instanceFollowRedirects = true
+            connection.doInput = true
+            connection.connect()
+            if (connection.responseCode !in 200..299) {
+                Log.w(TAG, "Artwork request failed for url=$coverUrl status=${connection.responseCode}")
+                null
+            } else {
+                connection.inputStream.use(::decodeArtworkBitmap)
+            }
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun decodeArtworkBitmap(stream: InputStream): Bitmap? {
+        return BitmapFactory.decodeStream(stream)
+    }
+
+    private fun resizeArtworkBitmap(bitmap: Bitmap): Bitmap {
+        val maxDimension = 512
+        val largestDimension = maxOf(bitmap.width, bitmap.height)
+        if (largestDimension <= maxDimension) {
+            return bitmap
+        }
+
+        val scale = maxDimension.toFloat() / largestDimension.toFloat()
+        val resizedWidth = (bitmap.width * scale).toInt().coerceAtLeast(1)
+        val resizedHeight = (bitmap.height * scale).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(bitmap, resizedWidth, resizedHeight, true)
+    }
+
     fun playTrack(track: QueueSongInfo, artist: String = "Unknown Artist", album: String = "Unknown Album") {
         lufsResolutionGeneration += 1
         playTrackInternal(track, artist, album)
@@ -945,6 +1080,10 @@ class MusicPlayerService : Service() {
 
         if (currentUrl == track.url && mediaPlayer != null && isPrepared) {
             applyTrackVolume(track)
+            currentArtworkBitmap = null
+            val currentDuration = mediaPlayer?.duration?.toLong() ?: 0L
+            applyTrackMetadata(track, artist, album, currentDuration, null)
+            loadArtworkForTrackAsync(track, artist, album, currentDuration)
             pendingSeekPositionMs?.let { pendingPosition ->
                 val clampedPosition = pendingPosition.coerceAtMost(mediaPlayer?.duration?.toLong() ?: pendingPosition).toInt()
                 mediaPlayer?.seekTo(clampedPosition)
@@ -976,6 +1115,7 @@ class MusicPlayerService : Service() {
         mediaPlayer = null
         isPrepared = false
         currentUrl = track.url
+        clearArtworkState()
         playbackGeneration += 1
         val generation = playbackGeneration
         persistSession(isPlayingOverride = false)
@@ -1023,14 +1163,8 @@ class MusicPlayerService : Service() {
                         pendingSeekPositionMs = null
                     }
                     applyTrackVolume(track)
-                    mediaSession.setMetadata(
-                        MediaMetadataCompat.Builder()
-                            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.name)
-                            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
-                            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
-                            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, mp.duration.toLong())
-                            .build()
-                    )
+                    applyTrackMetadata(track, artist, album, mp.duration.toLong(), null)
+                    loadArtworkForTrackAsync(track, artist, album, mp.duration.toLong())
                     persistSession(isPlayingOverride = false)
                     resumeMusic()
                     precacheNextTrack()
@@ -1136,6 +1270,7 @@ class MusicPlayerService : Service() {
         isPrepared = false
         currentUrl = null
         musicPlayerActive = false
+        clearArtworkState()
 
         if (clearQueue) {
             tracks = mutableListOf()
@@ -1249,6 +1384,7 @@ class MusicPlayerService : Service() {
             )
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setSmallIcon(android.R.drawable.ic_media_play)
+            .setLargeIcon(currentArtworkBitmap)
             .setOngoing(isPlaying)
             .addAction(previousAction)
             .addAction(playPauseAction)

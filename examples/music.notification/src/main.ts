@@ -2,6 +2,7 @@ import { play, pause, resume, stop, next, previous, seek, getState, startService
 
 // UI Elements
 const urlInput = document.querySelector("#urlInput") as HTMLInputElement;
+const coverUrlInput = document.querySelector("#coverUrlInput") as HTMLInputElement;
 const titleInput = document.querySelector("#titleInput") as HTMLInputElement;
 const artistInput = document.querySelector("#artistInput") as HTMLInputElement;
 const albumInput = document.querySelector("#albumInput") as HTMLInputElement;
@@ -26,12 +27,14 @@ const volumeValue = document.querySelector("#volumeValue") as HTMLElement;
 
 // Default values
 const DEFAULT_URL = "http://localhost:2080/api/music/id/42";
+const DEFAULT_COVER_URL = "http://localhost:2080/api/music/id/42/cover";
 const DEFAULT_TITLE = "Test Music";
 const DEFAULT_ARTIST = "Unknown Artist";
 const DEFAULT_ALBUM = "Unknown Album";
 
 // Initialize with default values
 urlInput.value = DEFAULT_URL;
+coverUrlInput.value = DEFAULT_COVER_URL;
 titleInput.value = DEFAULT_TITLE;
 artistInput.value = DEFAULT_ARTIST;
 albumInput.value = DEFAULT_ALBUM;
@@ -56,15 +59,17 @@ function updateStatus(state: PlaybackState) {
 // Event Handlers
 playBtn.addEventListener("click", async () => {
   const url = urlInput.value.trim() || DEFAULT_URL;
+  const coverUrl = coverUrlInput.value.trim() || DEFAULT_COVER_URL;
   const title = titleInput.value.trim() || DEFAULT_TITLE;
   const artist = artistInput.value.trim() || DEFAULT_ARTIST;
   const album = albumInput.value.trim() || DEFAULT_ALBUM;
 
   log(`Playing: ${title} by ${artist}`);
   log(`URL: ${url}`);
+  log(`Cover: ${coverUrl || "none"}`);
 
   try {
-    const result = await play({ url, title, artist, album });
+    const result = await play({ url, title, artist, album, coverUrl });
     if (result.success) {
       log("✓ Play command sent");
     } else {

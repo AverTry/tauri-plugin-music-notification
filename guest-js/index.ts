@@ -13,6 +13,7 @@ export interface PlayOptions {
   title?: string;
   artist?: string;
   album?: string;
+  coverUrl?: string;
 }
 
 export interface PlaybackState {
@@ -29,6 +30,7 @@ export interface QueueSong {
   path: string;
   url: string;
   lufs: number | null;
+  coverUrl?: string | null;
 }
 
 export interface PlayingQueue {
