@@ -1228,6 +1228,7 @@ class MusicPlayerService : Service() {
                 persistSession(isPlayingOverride = true)
                 updatePlaybackState()
                 updateNotification()
+                MusicNotificationPlugin.sendEvent("onPlay", JSObject())
             }
         } ?: Log.w(TAG, "MediaPlayer is null")
     }
@@ -1240,6 +1241,7 @@ class MusicPlayerService : Service() {
                 persistSession(isPlayingOverride = false)
                 updatePlaybackState()
                 updateNotification()
+                MusicNotificationPlugin.sendEvent("onPause", JSObject())
             }
         } ?: Log.w(TAG, "MediaPlayer is null")
     }
@@ -1323,6 +1325,7 @@ class MusicPlayerService : Service() {
             TAG,
             "playNextTrack: previousIndex=$previousIndex newIndex=$currentTrackIndex playMode=$playMode nextTrack=${tracks[currentTrackIndex].name}"
         )
+        MusicNotificationPlugin.sendEvent("onNext", JSObject())
         playTrack(tracks[currentTrackIndex])
     }
 
@@ -1338,6 +1341,7 @@ class MusicPlayerService : Service() {
                 TAG,
                 "playPreviousTrack: loop mode replaying currentTrackIndex=$currentTrackIndex track=${tracks[currentTrackIndex].name}"
             )
+            MusicNotificationPlugin.sendEvent("onPrev", JSObject())
             playTrack(tracks[currentTrackIndex])
             return
         }

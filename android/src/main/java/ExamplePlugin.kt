@@ -89,10 +89,18 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
         private const val PREFS_NAME = "music_notification"
         private const val PREF_SERVER_LIB_NAME = "server_lib_name"
 
+        private var instance: MusicNotificationPlugin? = null
+        fun sendEvent(name: String, payload: JSObject) { instance?.trigger(name, payload) }
+
         fun getServerLibName(context: Context): String? {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             return prefs.getString(PREF_SERVER_LIB_NAME, null)
         }
+    }
+
+    override fun load(webview: android.webkit.WebView) {
+        super.load(webview)
+        instance = this
     }
 
     @Command
