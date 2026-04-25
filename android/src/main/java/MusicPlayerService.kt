@@ -29,6 +29,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Collections
+import app.tauri.plugin.JSObject
 
 class MusicPlayerService : Service() {
 
