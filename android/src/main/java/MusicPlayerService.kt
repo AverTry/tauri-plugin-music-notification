@@ -1228,6 +1228,7 @@ class MusicPlayerService : Service() {
                 persistSession(isPlayingOverride = true)
                 updatePlaybackState()
                 updateNotification()
+                notifyFrontendOfChange("play")
             }
         } ?: Log.w(TAG, "MediaPlayer is null")
     }
@@ -1240,6 +1241,7 @@ class MusicPlayerService : Service() {
                 persistSession(isPlayingOverride = false)
                 updatePlaybackState()
                 updateNotification()
+                notifyFrontendOfChange("pause")
             }
         } ?: Log.w(TAG, "MediaPlayer is null")
     }
@@ -1311,6 +1313,7 @@ class MusicPlayerService : Service() {
                 "playNextTrack: loop mode replaying currentTrackIndex=$currentTrackIndex track=${tracks[currentTrackIndex].name}"
             )
             playTrack(tracks[currentTrackIndex])
+            notifyFrontendOfChange("next")
             return
         }
 
@@ -1324,6 +1327,7 @@ class MusicPlayerService : Service() {
             "playNextTrack: previousIndex=$previousIndex newIndex=$currentTrackIndex playMode=$playMode nextTrack=${tracks[currentTrackIndex].name}"
         )
         playTrack(tracks[currentTrackIndex])
+        notifyFrontendOfChange("next")
     }
 
     fun playPreviousTrack() {
@@ -1339,6 +1343,7 @@ class MusicPlayerService : Service() {
                 "playPreviousTrack: loop mode replaying currentTrackIndex=$currentTrackIndex track=${tracks[currentTrackIndex].name}"
             )
             playTrack(tracks[currentTrackIndex])
+            notifyFrontendOfChange("prev")
             return
         }
 
@@ -1352,6 +1357,7 @@ class MusicPlayerService : Service() {
             "playPreviousTrack: previousIndex=$previousIndex newIndex=$currentTrackIndex playMode=$playMode previousTrack=${tracks[currentTrackIndex].name}"
         )
         playTrack(tracks[currentTrackIndex])
+        notifyFrontendOfChange("prev")
     }
 
     private fun createNotification(): Notification {
@@ -1494,4 +1500,27 @@ class MusicPlayerService : Service() {
             manager.createNotificationChannel(channel)
         }
     }
+
+    private fun notifyFrontendOfChange(action: String) {
+    val payload = JSObject()
+    payload.put("action", action)
+    payload.put("currentIndex", currentTrackIndex)
+    payload.put("isPlaying", mediaPlayer?.isPlaying == true)
+    
+    // Check if the track exists to send extra info
+    if (currentTrackIndex in tracks.indices) {
+        payload.put("trackId", tracks[currentTrackIndex].id)
+    }
+
+    // Send generic change event AND specific action event
+    MusicNotificationPlugin.sendEvent("onTrackChanged", payload)
+    
+    // Map internal actions to your JS listeners
+    when(action) {
+        "next" -> MusicNotificationPlugin.sendEvent("onNext", payload)
+        "prev" -> MusicNotificationPlugin.sendEvent("onPrev", payload)
+        "play" -> MusicNotificationPlugin.sendEvent("onPlay", payload)
+        "pause" -> MusicNotificationPlugin.sendEvent("onPause", payload)
+    }
+}
 }

@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-listeners"
+description = "Enables the ability to listen to events from the Android service."
+commands.allow = ["register-listener", "remove-listener"]
+
+[[permission]]
+identifier = "deny-listeners"
+description = "Denies the ability to listen to events from the Android service."
+commands.deny = ["register-listener", "remove-listener"]

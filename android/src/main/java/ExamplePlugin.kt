@@ -95,6 +95,16 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
         }
     }
 
+    override fun load(webview: android.webkit.WebView) {
+        super.load(webview)
+        instance = this
+    }
+
+    override fun onStop() {
+    instance = null
+    super.onStop()
+}
+
     @Command
     fun ping(invoke: Invoke) {
         val args = invoke.parseArgs(PingArgs::class.java)

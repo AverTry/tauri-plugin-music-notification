@@ -23,8 +23,7 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
     api: PluginApi<R, C>,
 ) -> crate::Result<MusicNotification<R>> {
     #[cfg(target_os = "android")]
-    let handle =
-        api.register_android_plugin("com.plugin.music_notification", "MusicNotificationPlugin")?;
+    let handle = api.register_android_plugin::<MusicNotification<R>>("com.plugin.music_notification", "MusicNotificationPlugin")?;
     #[cfg(target_os = "ios")]
     let handle = api.register_ios_plugin(init_plugin_music_notification)?;
     Ok(MusicNotification(handle, MusicNotificationState::default()))

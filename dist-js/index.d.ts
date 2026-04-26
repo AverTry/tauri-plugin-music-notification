@@ -1,3 +1,14 @@
+import { PluginListener } from "@tauri-apps/api/core";
+export interface PlaybackEvent {
+    action: "play" | "pause" | "next" | "prev";
+    currentIndex: number;
+    isPlaying: boolean;
+    trackId?: number;
+}
+export declare function onPlay(handler: (data: PlaybackEvent) => void): Promise<PluginListener>;
+export declare function onPause(handler: (data: PlaybackEvent) => void): Promise<PluginListener>;
+export declare function onNext(handler: (data: PlaybackEvent) => void): Promise<PluginListener>;
+export declare function onPrev(handler: (data: PlaybackEvent) => void): Promise<PluginListener>;
 export declare function ping(value: string): Promise<string | null>;
 export interface PlayOptions {
     url: string;
@@ -11,7 +22,7 @@ export interface PlaybackState {
     position: number;
     duration: number;
 }
-export type PlayMode = 'sequential' | 'shuffle' | 'loop';
+export type PlayMode = "sequential" | "shuffle" | "loop";
 export interface QueueSong {
     id: number;
     name: string;
@@ -92,7 +103,7 @@ export declare function setVolume(options: SetVolumeOptions): Promise<{
     success: boolean;
     message?: string;
 }>;
-export type NormalizationMode = 'auto' | 'manual' | 'fixed';
+export type NormalizationMode = "auto" | "manual" | "fixed";
 export interface SetNormalizationConfigOptions {
     mode: NormalizationMode;
     manualVolume: number;
