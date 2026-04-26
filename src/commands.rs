@@ -135,12 +135,12 @@ pub(crate) async fn set_server<R: Runtime>(
     app.music_notification().set_server(library_name)
 }
 
-#[command]
+#[command(rename = "registerListener")]
 pub(crate) fn register_listener() {
-    // This provides the handshake the frontend is looking for.
+    // Handshake
 }
 
-#[command]
+#[command(rename = "removeListener")]
 pub(crate) fn remove_listener() {
-    // This allows the frontend to clean up without errors.
+    // Handshake
 }
