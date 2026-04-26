@@ -89,7 +89,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
         private const val PREFS_NAME = "music_notification"
         private const val PREF_SERVER_LIB_NAME = "server_lib_name"
 
-        var instance: MusicNotificationPlugin? = null
+        // var instance: MusicNotificationPlugin? = null
 
         fun getServerLibName(context: Context): String? {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -103,10 +103,10 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
         instance = this
     }
 
-    override fun onStop() {
-        instance = null
-        super.onStop()
-    }
+    // override fun onStop() {
+    //     instance = null
+    //     super.onStop()
+    // }
 
     @Command
     fun ping(invoke: Invoke) {
