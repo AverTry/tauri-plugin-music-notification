@@ -35,12 +35,6 @@ impl<R: Runtime, T: Manager<R>> crate::MusicNotificationExt<R> for T {
     }
 }
 
-#[tauri::command]
-pub fn register_listener() {}
-
-#[tauri::command]
-pub fn remove_listener() {}
-
 /// Initializes the plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("music-notification")
