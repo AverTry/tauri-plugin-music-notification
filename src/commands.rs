@@ -134,3 +134,13 @@ pub(crate) async fn set_server<R: Runtime>(
 ) -> Result<SetServerResponse> {
     app.music_notification().set_server(library_name)
 }
+
+#[command]
+pub(crate) fn register_listener() {
+    // This provides the handshake the frontend is looking for.
+}
+
+#[command]
+pub(crate) fn remove_listener() {
+    // This allows the frontend to clean up without errors.
+}
