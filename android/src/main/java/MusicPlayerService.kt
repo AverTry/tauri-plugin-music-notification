@@ -29,6 +29,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Collections
+import app.tauri.plugin.JSObject
 
 class MusicPlayerService : Service() {
 
@@ -1507,20 +1508,48 @@ class MusicPlayerService : Service() {
     payload.put("currentIndex", currentTrackIndex)
     payload.put("isPlaying", mediaPlayer?.isPlaying == true)
     
-    // Check if the track exists to send extra info
     if (currentTrackIndex in tracks.indices) {
         payload.put("trackId", tracks[currentTrackIndex].id)
     }
 
-    // Send generic change event AND specific action event
-    MusicNotificationPlugin.sendEvent("onTrackChanged", payload)
-    
-    // Map internal actions to your JS listeners
-    when(action) {
-        "next" -> MusicNotificationPlugin.sendEvent("onNext", payload)
-        "prev" -> MusicNotificationPlugin.sendEvent("onPrev", payload)
-        "play" -> MusicNotificationPlugin.sendEvent("onPlay", payload)
-        "pause" -> MusicNotificationPlugin.sendEvent("onPause", payload)
+    // Use the 'instance' variable we added to the Plugin class
+    val plugin = MusicNotificationPlugin.instance
+
+    if (plugin != null) {
+        // Now we call sendEvent on the ACTUAL running plugin
+        plugin.trigger("onTrackChanged", payload)
+        
+        when(action) {
+            "next" -> plugin.trigger("onNext", payload)
+            "prev" -> plugin.trigger("onPrev", payload)
+            "play" -> plugin.trigger("onPlay", payload)
+            "pause" -> plugin.trigger("onPause", payload)
+        }
+    } else {
+        Log.e("MusicService", "Could not send event: Plugin instance is null")
     }
 }
+
+//     private fun notifyFrontendOfChange(action: String) {
+//     val payload = JSObject()
+//     payload.put("action", action)
+//     payload.put("currentIndex", currentTrackIndex)
+//     payload.put("isPlaying", mediaPlayer?.isPlaying == true)
+    
+//     // Check if the track exists to send extra info
+//     if (currentTrackIndex in tracks.indices) {
+//         payload.put("trackId", tracks[currentTrackIndex].id)
+//     }
+
+//     // Send generic change event AND specific action event
+//     MusicNotificationPlugin.sendEvent("onTrackChanged", payload)
+    
+//     // Map internal actions to your JS listeners
+//     when(action) {
+//         "next" -> MusicNotificationPlugin.sendEvent("onNext", payload)
+//         "prev" -> MusicNotificationPlugin.sendEvent("onPrev", payload)
+//         "play" -> MusicNotificationPlugin.sendEvent("onPlay", payload)
+//         "pause" -> MusicNotificationPlugin.sendEvent("onPause", payload)
+//     }
+// }
 }

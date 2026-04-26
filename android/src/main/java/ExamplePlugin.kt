@@ -95,6 +95,8 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
         }
     }
 
+    var instance: MusicNotificationPlugin? = null
+
     override fun load(webview: android.webkit.WebView) {
         super.load(webview)
         instance = this
