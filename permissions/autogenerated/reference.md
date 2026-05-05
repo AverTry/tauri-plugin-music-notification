@@ -24,6 +24,7 @@ Default permissions for the plugin
 - `allow-get-playback-session`
 - `allow-clear-playing-queue`
 - `allow-set-play-mode`
+- `allow-listeners`
 
 ## Permission Table
 
@@ -550,6 +551,32 @@ Enables the stop_service command without any pre-configured scope.
 <td>
 
 Denies the stop_service command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:allow-listeners`
+
+</td>
+<td>
+
+Enables the ability to listen to events from the Android service.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`music-notification-api:deny-listeners`
+
+</td>
+<td>
+
+Denies the ability to listen to events from the Android service.
 
 </td>
 </tr>

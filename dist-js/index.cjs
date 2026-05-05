@@ -4,23 +4,33 @@ var core = require('@tauri-apps/api/core');
 
 // Update the handler type to accept the payload
 async function onPlay(handler) {
-    return await core.addPluginListener("music-notification", "onPlay", (event) => {
-        handler(event.payload);
+    return await core.addPluginListener("music-notification", "onPlay", (payload) => {
+        handler(payload);
     });
 }
 async function onPause(handler) {
-    return await core.addPluginListener("music-notification", "onPause", (event) => {
-        handler(event.payload);
+    return await core.addPluginListener("music-notification", "onPause", (payload) => {
+        handler(payload);
     });
 }
 async function onNext(handler) {
-    return await core.addPluginListener("music-notification", "onNext", (event) => {
-        handler(event.payload);
+    return await core.addPluginListener("music-notification", "onNext", (payload) => {
+        handler(payload);
     });
 }
 async function onPrev(handler) {
-    return await core.addPluginListener("music-notification", "onPrev", (event) => {
-        handler(event.payload);
+    return await core.addPluginListener("music-notification", "onPrev", (payload) => {
+        handler(payload);
+    });
+}
+async function onQueueEnded(handler) {
+    return await core.addPluginListener("music-notification", "onQueueEnded", (payload) => {
+        handler(payload);
+    });
+}
+async function onPreviousAlbumNeeded(handler) {
+    return await core.addPluginListener("music-notification", "onPreviousAlbumNeeded", (payload) => {
+        handler(payload);
     });
 }
 async function ping(value) {
@@ -121,6 +131,8 @@ exports.onNext = onNext;
 exports.onPause = onPause;
 exports.onPlay = onPlay;
 exports.onPrev = onPrev;
+exports.onPreviousAlbumNeeded = onPreviousAlbumNeeded;
+exports.onQueueEnded = onQueueEnded;
 exports.pause = pause;
 exports.pauseAfter = pauseAfter;
 exports.ping = ping;

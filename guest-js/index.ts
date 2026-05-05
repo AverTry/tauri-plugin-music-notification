@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { addPluginListener, PluginListener } from "@tauri-apps/api/core";
 
 export interface PlaybackEvent {
-  action: "play" | "pause" | "next" | "prev";
+  action: "play" | "pause" | "next" | "prev" | "queueEnded" | "previousAlbumNeeded";
   currentIndex: number;
   isPlaying: boolean;
   trackId?: number;
@@ -11,24 +11,36 @@ export interface PlaybackEvent {
 
 // Update the handler type to accept the payload
 export async function onPlay(handler: (data: PlaybackEvent) => void): Promise<PluginListener> {
-  return await addPluginListener("music-notification", "onPlay", (event: { payload: PlaybackEvent }) => {
-    handler(event.payload);
+  return await addPluginListener("music-notification", "onPlay", (payload: PlaybackEvent) => {
+    handler(payload);
   });
 }
 export async function onPause(handler: (data: PlaybackEvent) => void): Promise<PluginListener> {
-  return await addPluginListener("music-notification", "onPause", (event: { payload: PlaybackEvent }) => {
-    handler(event.payload);
+  return await addPluginListener("music-notification", "onPause", (payload: PlaybackEvent) => {
+    handler(payload);
   });
 }
 export async function onNext(handler: (data: PlaybackEvent) => void): Promise<PluginListener> {
-  return await addPluginListener("music-notification", "onNext", (event: { payload: PlaybackEvent }) => {
-    handler(event.payload);
+  return await addPluginListener("music-notification", "onNext", (payload: PlaybackEvent) => {
+    handler(payload);
   });
 }
 
 export async function onPrev(handler: (data: PlaybackEvent) => void): Promise<PluginListener> {
-  return await addPluginListener("music-notification", "onPrev", (event: { payload: PlaybackEvent }) => {
-    handler(event.payload);
+  return await addPluginListener("music-notification", "onPrev", (payload: PlaybackEvent) => {
+    handler(payload);
+  });
+}
+
+export async function onQueueEnded(handler: (data: PlaybackEvent) => void): Promise<PluginListener> {
+  return await addPluginListener("music-notification", "onQueueEnded", (payload: PlaybackEvent) => {
+    handler(payload);
+  });
+}
+
+export async function onPreviousAlbumNeeded(handler: (data: PlaybackEvent) => void): Promise<PluginListener> {
+  return await addPluginListener("music-notification", "onPreviousAlbumNeeded", (payload: PlaybackEvent) => {
+    handler(payload);
   });
 }
 

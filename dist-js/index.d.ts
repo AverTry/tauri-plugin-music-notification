@@ -1,6 +1,6 @@
 import { PluginListener } from "@tauri-apps/api/core";
 export interface PlaybackEvent {
-    action: "play" | "pause" | "next" | "prev";
+    action: "play" | "pause" | "next" | "prev" | "queueEnded" | "previousAlbumNeeded";
     currentIndex: number;
     isPlaying: boolean;
     trackId?: number;
@@ -9,6 +9,8 @@ export declare function onPlay(handler: (data: PlaybackEvent) => void): Promise<
 export declare function onPause(handler: (data: PlaybackEvent) => void): Promise<PluginListener>;
 export declare function onNext(handler: (data: PlaybackEvent) => void): Promise<PluginListener>;
 export declare function onPrev(handler: (data: PlaybackEvent) => void): Promise<PluginListener>;
+export declare function onQueueEnded(handler: (data: PlaybackEvent) => void): Promise<PluginListener>;
+export declare function onPreviousAlbumNeeded(handler: (data: PlaybackEvent) => void): Promise<PluginListener>;
 export declare function ping(value: string): Promise<string | null>;
 export interface PlayOptions {
     url: string;

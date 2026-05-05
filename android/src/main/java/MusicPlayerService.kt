@@ -21,15 +21,16 @@ import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat as MediaNotificationCompat
-import androidx.media.session.MediaButtonReceiver
-import org.json.JSONArray
-import org.json.JSONObject
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import java.io.FileInputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Collections
 import app.tauri.plugin.JSObject
+import org.json.JSONObject
+import org.json.JSONArray
+import androidx.media.session.MediaButtonReceiver
 
 class MusicPlayerService : Service() {
 
@@ -56,6 +57,8 @@ class MusicPlayerService : Service() {
         const val ACTION_STOP_SERVICE = "com.plugin.music_notification.STOP_SERVICE"
         const val ACTION_SET_VOLUME = "com.plugin.music_notification.SET_VOLUME"
         const val ACTION_SET_NORMALIZATION_CONFIG = "com.plugin.music_notification.SET_NORMALIZATION_CONFIG"
+        
+        const val MUSIC_EVENT_ACTION = "MUSIC_NOTIFICATION_EVENT"
 
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
@@ -75,24 +78,19 @@ class MusicPlayerService : Service() {
             val libName = MusicNotificationPlugin.getServerLibName(context)
                 ?: "musicnotification_lib"
 
+            // If no server library name is set, don't try to load anything
+            if (libName == "musicnotification_lib" && MusicNotificationPlugin.getServerLibName(context) == null) {
+                Log.i(TAG, "No custom server library configured, using basic playback mode")
+                return null
+            }
+
             try {
                 System.loadLibrary(libName)
+                Log.i(TAG, "Successfully loaded server library: $libName")
                 return libName
             } catch (e: UnsatisfiedLinkError) {
-                Log.e(TAG, "Failed to load server library $libName", e)
-                try {
-                    val appClassLoader = context.applicationContext.classLoader
-                    val loadLibraryMethod = Class.forName("java.lang.System").getDeclaredMethod(
-                        "loadLibrary",
-                        String::class.java,
-                        ClassLoader::class.java
-                    )
-                    loadLibraryMethod.invoke(null, libName, appClassLoader)
-                    return libName
-                } catch (ex: Exception) {
-                    Log.e(TAG, "Failed to load server library $libName via classloader", ex)
-                    return null
-                }
+                Log.w(TAG, "Failed to load server library $libName - basic playback will work but advanced features may be limited", e)
+                return null
             }
         }
 
@@ -288,6 +286,10 @@ class MusicPlayerService : Service() {
     private var tracks = mutableListOf<QueueSongInfo>()
     private var currentTrackIndex = -1
     private var playMode = "sequential"
+    // Index boundaries of the CURRENT album. Set when queue is loaded.
+    // Used to detect album boundaries without race conditions from mid-playback queue swaps.
+    private var albumStartTrackIndex = 0  // Initialized to 0 since all queues start at index 0
+    private var albumEndTrackIndex = -1   // Will be set by setPlayingQueue()
 
     private var mediaPlayer: MediaPlayer? = null
     private var isPrepared = false
@@ -443,22 +445,25 @@ class MusicPlayerService : Service() {
 
         val loadedLib = loadServerLibrary(this)
         if (loadedLib == null) {
-            Log.e(TAG, "No server library could be loaded, JNI call will likely fail")
-        }
-
-        val result = try {
-            serverStart()
-        } catch (e: UnsatisfiedLinkError) {
-            Log.e(TAG, "serverStart() JNI symbol missing", e)
-            throw e
-        } catch (e: Exception) {
-            Log.e(TAG, "serverStart() threw unexpected exception", e)
-            throw e
-        }
-        if (result == 0) {
-            httpServerRunning = true
+            Log.i(TAG, "No server library loaded - operating in basic playback mode")
+            httpServerRunning = false
         } else {
-            Log.e(TAG, "Failed to start server, code: $result")
+            val result = try {
+                serverStart()
+            } catch (e: UnsatisfiedLinkError) {
+                Log.w(TAG, "serverStart() JNI symbol missing - continuing with basic playback only", e)
+                -1
+            } catch (e: Exception) {
+                Log.w(TAG, "serverStart() threw unexpected exception - continuing with basic playback only", e)
+                -1
+            }
+            if (result == 0) {
+                httpServerRunning = true
+                Log.i(TAG, "Server started successfully")
+            } else {
+                Log.w(TAG, "Failed to start server, code: $result - continuing with basic playback only")
+                httpServerRunning = false
+            }
         }
     }
 
@@ -506,7 +511,7 @@ class MusicPlayerService : Service() {
                     schedulePauseAfter(delayMs)
                 }
                 ACTION_RESUME -> resumeMusic()
-                ACTION_STOP -> stopMusic(clearQueue = false)
+                ACTION_STOP -> stopMusicAndService(clearQueue = false)
                 ACTION_NEXT -> {
                     Log.d(
                         TAG,
@@ -581,6 +586,10 @@ class MusicPlayerService : Service() {
             else -> currentIndex
         }
         playMode = normalizePlayMode(newPlayMode)
+        // Snapshot the album boundaries at load time to avoid race conditions later.
+        albumStartTrackIndex = 0
+        albumEndTrackIndex = if (tracks.isNotEmpty()) tracks.lastIndex else -1
+        Log.d(TAG, "setPlayingQueue: loaded ${tracks.size} tracks, albumStartTrackIndex=$albumStartTrackIndex, albumEndTrackIndex=$albumEndTrackIndex, playMode=$playMode, currentTrackIndex=$currentTrackIndex")
         if (currentTrackIndex in tracks.indices) {
             currentUrl = tracks[currentTrackIndex].url
         }
@@ -594,7 +603,7 @@ class MusicPlayerService : Service() {
     }
 
     fun clearPlayingQueue() {
-        stopMusic(clearQueue = true)
+        stopMusicAndService(clearQueue = true)
     }
 
     fun getPlaybackSession(): SessionSnapshot {
@@ -623,6 +632,9 @@ class MusicPlayerService : Service() {
         playMode = normalizePlayMode(snapshot.playMode)
         currentUrl = if (currentTrackIndex in tracks.indices) tracks[currentTrackIndex].url else null
         musicPlayerActive = snapshot.runtime.isPlaying
+        // Restore album boundaries for the persisted queue so next/prev behave correctly.
+        albumStartTrackIndex = 0
+        albumEndTrackIndex = if (tracks.isNotEmpty()) tracks.lastIndex else -1
 
         // Set media session metadata so notification shows the restored track info
         if (currentTrackIndex in tracks.indices) {
@@ -647,11 +659,31 @@ class MusicPlayerService : Service() {
 
     private fun buildRuntimeSnapshot(): PlaybackRuntimeSnapshot {
         mediaPlayer?.let { player ->
-            return PlaybackRuntimeSnapshot(
-                isPlaying = player.isPlaying,
-                positionMs = player.currentPosition.toLong(),
-                durationMs = player.duration.toLong()
-            )
+            try {
+                // Only safely access duration/currentPosition if player is prepared
+                // If the player throws an exception, fall back to persisted session
+                val duration = try {
+                    player.duration.toLong()
+                } catch (e: Exception) {
+                    // Player not yet prepared, return 0
+                    0L
+                }
+                
+                val position = try {
+                    player.currentPosition.toLong()
+                } catch (e: Exception) {
+                    // Player not yet prepared, return 0
+                    0L
+                }
+                
+                return PlaybackRuntimeSnapshot(
+                    isPlaying = player.isPlaying,
+                    positionMs = position,
+                    durationMs = duration
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error building runtime snapshot from player", e)
+            }
         }
 
         val persisted = loadPersistedSessionSnapshot(this)
@@ -1221,19 +1253,6 @@ class MusicPlayerService : Service() {
         }
     }
 
-    fun resumeMusic() {
-        mediaPlayer?.let {
-            if (isPrepared && !it.isPlaying) {
-                it.start()
-                handler.post(progressRunnable)
-                persistSession(isPlayingOverride = true)
-                updatePlaybackState()
-                updateNotification()
-                notifyFrontendOfChange("play")
-            }
-        } ?: Log.w(TAG, "MediaPlayer is null")
-    }
-
     fun pauseMusic() {
         mediaPlayer?.let {
             if (it.isPlaying) {
@@ -1243,6 +1262,19 @@ class MusicPlayerService : Service() {
                 updatePlaybackState()
                 updateNotification()
                 notifyFrontendOfChange("pause")
+            }
+        } ?: Log.w(TAG, "MediaPlayer is null")
+    }
+
+    fun resumeMusic() {
+        mediaPlayer?.let {
+            if (isPrepared && !it.isPlaying) {
+                it.start()
+                handler.post(progressRunnable)
+                persistSession(isPlayingOverride = true)
+                updatePlaybackState()
+                updateNotification()
+                notifyFrontendOfChange("play")
             }
         } ?: Log.w(TAG, "MediaPlayer is null")
     }
@@ -1298,6 +1330,14 @@ class MusicPlayerService : Service() {
         persistSession(isPlayingOverride = false)
         updatePlaybackState()
         updateNotification()
+        // Do NOT call updateServiceLifetime() here.
+        // Only stop the music player, keep service alive for album transitions.
+        // Service will be killed via updateServiceLifetime() when explicitly stopped by user.
+    }
+
+    private fun stopMusicAndService(clearQueue: Boolean) {
+        // Used when user explicitly stops playback, unlike stopMusic() which is for track/album transitions.
+        stopMusic(clearQueue)
         updateServiceLifetime()
     }
 
@@ -1318,10 +1358,28 @@ class MusicPlayerService : Service() {
             return
         }
 
+        // For sequential mode, check if we're at the end
+        // Use albumEndTrackIndex (snapshotted when queue loaded) not tracks.lastIndex
+        // to avoid race conditions if the app swaps the queue while we're processing completion.
+        if (playMode == "sequential" && currentTrackIndex >= albumEndTrackIndex) {
+            Log.d(
+                TAG,
+                "playNextTrack: sequential mode reached end of album at currentTrackIndex=$currentTrackIndex albumEndTrackIndex=$albumEndTrackIndex. Emitting queueEnded."
+            )
+            notifyFrontendOfChange("queueEnded")
+            stopMusic(clearQueue = false)
+            return
+        }
+
+        // Advance to next track
         currentTrackIndex = if (currentTrackIndex in tracks.indices) {
-            (currentTrackIndex + 1) % tracks.size
+            ((currentTrackIndex + 1).coerceAtMost(tracks.lastIndex)).coerceAtMost(tracks.lastIndex)
         } else {
             0
+        }
+        if (currentTrackIndex !in tracks.indices) {
+            Log.w(TAG, "playNextTrack: currentTrackIndex=$currentTrackIndex out of bounds (tracks.size=${tracks.size}), clamping to 0")
+            currentTrackIndex = 0
         }
         Log.d(
             TAG,
@@ -1348,10 +1406,27 @@ class MusicPlayerService : Service() {
             return
         }
 
+        // For sequential mode, check if we're at the beginning of the current album
+        if (playMode == "sequential" && currentTrackIndex <= albumStartTrackIndex) {
+            Log.d(
+                TAG,
+                "playPreviousTrack: sequential mode at beginning of album (track $currentTrackIndex, albumStartTrackIndex=$albumStartTrackIndex). Requesting previous album."
+            )
+            stopMusic(clearQueue = false)
+            notifyFrontendOfChange("previousAlbumNeeded")
+            return
+        }
+
+        // Go to previous track
         currentTrackIndex = if (currentTrackIndex in tracks.indices) {
-            if (currentTrackIndex == 0) tracks.lastIndex else currentTrackIndex - 1
+            ((currentTrackIndex - 1).coerceAtLeast(albumStartTrackIndex)).coerceAtLeast(0)
         } else {
-            0
+            albumStartTrackIndex.coerceAtLeast(0)
+        }
+        // Ensure index is valid before accessing
+        if (currentTrackIndex !in tracks.indices) {
+            Log.w(TAG, "playPreviousTrack: currentTrackIndex=$currentTrackIndex out of bounds (tracks.size=${tracks.size}), clamping to 0")
+            currentTrackIndex = 0
         }
         Log.d(
             TAG,
@@ -1503,53 +1578,26 @@ class MusicPlayerService : Service() {
     }
 
     private fun notifyFrontendOfChange(action: String) {
-    val payload = JSObject()
-    payload.put("action", action)
-    payload.put("currentIndex", currentTrackIndex)
-    payload.put("isPlaying", mediaPlayer?.isPlaying == true)
-    
-    if (currentTrackIndex in tracks.indices) {
-        payload.put("trackId", tracks[currentTrackIndex].id)
-    }
-
-    // Use the 'instance' variable we added to the Plugin class
-    val plugin = MusicNotificationPlugin.instance
-
-    if (plugin != null) {
-        // Now we call sendEvent on the ACTUAL running plugin
-        plugin.trigger("onTrackChanged", payload)
-        
-        when(action) {
-            "next" -> plugin.trigger("onNext", payload)
-            "prev" -> plugin.trigger("onPrev", payload)
-            "play" -> plugin.trigger("onPlay", payload)
-            "pause" -> plugin.trigger("onPause", payload)
+        val eventName = when (action) {
+            "play" -> "onPlay"
+            "pause" -> "onPause"
+            "next" -> "onNext"
+            "prev" -> "onPrev"
+            "queueEnded" -> "onQueueEnded"
+            "previousAlbumNeeded" -> "onPreviousAlbumNeeded"
+            else -> return
         }
-    } else {
-        Log.e("MusicService", "Could not send event: Plugin instance is null")
+
+        val intent = Intent(MUSIC_EVENT_ACTION).apply {
+            putExtra("eventName", eventName)
+            putExtra("action", action)
+            putExtra("currentIndex", currentTrackIndex)
+            putExtra("isPlaying", mediaPlayer?.isPlaying ?: false)
+            putExtra("trackId", tracks.getOrNull(currentTrackIndex)?.id ?: -1L)
+        }
+
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        Log.d(TAG, "Sent broadcast: eventName=$eventName, action=$action, currentIndex=$currentTrackIndex, isPlaying=${mediaPlayer?.isPlaying ?: false}, trackId=${tracks.getOrNull(currentTrackIndex)?.id ?: -1L}")
     }
-}
 
-//     private fun notifyFrontendOfChange(action: String) {
-//     val payload = JSObject()
-//     payload.put("action", action)
-//     payload.put("currentIndex", currentTrackIndex)
-//     payload.put("isPlaying", mediaPlayer?.isPlaying == true)
-    
-//     // Check if the track exists to send extra info
-//     if (currentTrackIndex in tracks.indices) {
-//         payload.put("trackId", tracks[currentTrackIndex].id)
-//     }
-
-//     // Send generic change event AND specific action event
-//     MusicNotificationPlugin.sendEvent("onTrackChanged", payload)
-    
-//     // Map internal actions to your JS listeners
-//     when(action) {
-//         "next" -> MusicNotificationPlugin.sendEvent("onNext", payload)
-//         "prev" -> MusicNotificationPlugin.sendEvent("onPrev", payload)
-//         "play" -> MusicNotificationPlugin.sendEvent("onPlay", payload)
-//         "pause" -> MusicNotificationPlugin.sendEvent("onPause", payload)
-//     }
-// }
 }

@@ -1,4 +1,4 @@
-use tauri::{command, AppHandle, Runtime};
+use tauri::{command, AppHandle, Runtime, Emitter};
 
 use crate::models::*;
 use crate::MusicNotificationExt;
@@ -17,12 +17,42 @@ pub(crate) async fn play<R: Runtime>(
     app: AppHandle<R>,
     payload: PlayRequest,
 ) -> Result<PlayResponse> {
-    app.music_notification().play(payload)
+    // Removed .await because play() returns Result, not a Future
+    let result = app.music_notification().play(payload)?; 
+    
+    #[cfg(desktop)]
+    if result.success {
+        let state = app.music_notification().get_state()?;
+        let session = app.music_notification().get_playback_session()?;
+        
+        let event = PlaybackEvent {
+            action: "play".to_string(),
+            current_index: session.queue.current_index,
+            is_playing: state.is_playing,
+            track_id: session.current_song_id,
+        };
+        app.emit("onPlay", event).ok();
+    }
+    Ok(result)
 }
 
 #[command]
 pub(crate) async fn pause<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
-    app.music_notification().pause()
+    let result = app.music_notification().pause();
+    #[cfg(desktop)]
+    {
+        let state = app.music_notification().get_state()?;
+        let session = app.music_notification().get_playback_session()?;
+        
+        let event = PlaybackEvent {
+            action: "pause".to_string(),
+            current_index: session.queue.current_index,
+            is_playing: state.is_playing,
+            track_id: session.current_song_id,
+        };
+        app.emit("onPause", event).ok();
+    }
+    result
 }
 
 #[command]
@@ -45,12 +75,40 @@ pub(crate) async fn stop<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse>
 
 #[command]
 pub(crate) async fn next<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
-    app.music_notification().next()
+    let result = app.music_notification().next()?;
+    #[cfg(desktop)]
+    {
+        let state = app.music_notification().get_state()?;
+        let session = app.music_notification().get_playback_session()?;
+        
+        let event = PlaybackEvent {
+            action: "next".to_string(),
+            current_index: session.queue.current_index,
+            is_playing: state.is_playing,
+            track_id: session.current_song_id,
+        };
+        app.emit("onNext", event).ok();
+    }
+    Ok(result)
 }
 
 #[command]
 pub(crate) async fn previous<R: Runtime>(app: AppHandle<R>) -> Result<EmptyResponse> {
-    app.music_notification().previous()
+    let result = app.music_notification().previous()?;
+    #[cfg(desktop)]
+    {
+        let state = app.music_notification().get_state()?;
+        let session = app.music_notification().get_playback_session()?;
+        
+        let event = PlaybackEvent {
+            action: "prev".to_string(),
+            current_index: session.queue.current_index,
+            is_playing: state.is_playing,
+            track_id: session.current_song_id,
+        };
+        app.emit("onPrev", event).ok();
+    }
+    Ok(result)
 }
 
 #[command]

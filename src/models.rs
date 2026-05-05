@@ -1,5 +1,14 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackEvent {
+    pub action: String, // "play", "pause", "next", "prev"
+    pub current_index: Option<usize>,
+    pub is_playing: bool,
+    pub track_id: Option<i64>,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PingRequest {

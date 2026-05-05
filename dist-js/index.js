@@ -2,23 +2,33 @@ import { addPluginListener, invoke } from '@tauri-apps/api/core';
 
 // Update the handler type to accept the payload
 async function onPlay(handler) {
-    return await addPluginListener("music-notification", "onPlay", (event) => {
-        handler(event.payload);
+    return await addPluginListener("music-notification", "onPlay", (payload) => {
+        handler(payload);
     });
 }
 async function onPause(handler) {
-    return await addPluginListener("music-notification", "onPause", (event) => {
-        handler(event.payload);
+    return await addPluginListener("music-notification", "onPause", (payload) => {
+        handler(payload);
     });
 }
 async function onNext(handler) {
-    return await addPluginListener("music-notification", "onNext", (event) => {
-        handler(event.payload);
+    return await addPluginListener("music-notification", "onNext", (payload) => {
+        handler(payload);
     });
 }
 async function onPrev(handler) {
-    return await addPluginListener("music-notification", "onPrev", (event) => {
-        handler(event.payload);
+    return await addPluginListener("music-notification", "onPrev", (payload) => {
+        handler(payload);
+    });
+}
+async function onQueueEnded(handler) {
+    return await addPluginListener("music-notification", "onQueueEnded", (payload) => {
+        handler(payload);
+    });
+}
+async function onPreviousAlbumNeeded(handler) {
+    return await addPluginListener("music-notification", "onPreviousAlbumNeeded", (payload) => {
+        handler(payload);
     });
 }
 async function ping(value) {
@@ -111,4 +121,4 @@ async function setServer(libraryName) {
     });
 }
 
-export { clearPlayingQueue, getPlaybackSession, getState, next, onNext, onPause, onPlay, onPrev, pause, pauseAfter, ping, play, previous, resume, seek, seekAndPlay, setNormalizationConfig, setPlayMode, setPlayingQueue, setServer, setVolume, startService, stop, stopService };
+export { clearPlayingQueue, getPlaybackSession, getState, next, onNext, onPause, onPlay, onPrev, onPreviousAlbumNeeded, onQueueEnded, pause, pauseAfter, ping, play, previous, resume, seek, seekAndPlay, setNormalizationConfig, setPlayMode, setPlayingQueue, setServer, setVolume, startService, stop, stopService };

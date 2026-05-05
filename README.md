@@ -13,6 +13,9 @@ A Tauri plugin for Android that provides music playback notifications with media
 - 🔔 Native Android media notification with controls
 - 🖼️ Notification artwork via `coverUrl` for play requests and queue items
 - 🎨 Lock screen controls support
+- ▶️ Playback queue control with `setPlayingQueue` and `clearPlayingQueue`
+- 📦 Playback session inspection via `getPlaybackSession`
+- 🔔 Playback event listeners: `onPlay`, `onPause`, `onNext`, `onPrev`, `onQueueEnded`, `onPreviousAlbumNeeded`
 - 🌐 HTTP Server integration via trait-based API
 
 ## Installation
@@ -195,7 +198,8 @@ Support varies by Android version and device hardware.
 ### JavaScript/TypeScript
 
 ```typescript
-import { play, pause, resume, stop, next, previous, seek, getState, setPlayingQueue, setVolume } from 'music-notification-api';
+import { play, pause, resume, stop, next, previous, seek, getState, setPlayingQueue, getPlaybackSession, clearPlayingQueue } from 'music-notification-api';
+import { onPlay, onPause, onNext, onPrev, onQueueEnded, onPreviousAlbumNeeded } from 'music-notification-api';
 
 // Play music
 await play({
@@ -250,6 +254,29 @@ const state = await getState();
 console.log(state.isPlaying); // true/false
 console.log(state.position);  // Current position in ms
 console.log(state.duration);  // Total duration in ms
+
+// Inspect the current session and queue
+const session = await getPlaybackSession();
+console.log(session.queue);
+
+// Clear the active playback queue before loading a new album or playlist
+await clearPlayingQueue();
+
+// Event listeners
+const unPlay = await onPlay((event) => console.log('play', event));
+const unPause = await onPause((event) => console.log('pause', event));
+const unNext = await onNext((event) => console.log('next', event));
+const unPrev = await onPrev((event) => console.log('prev', event));
+const unQueueEnded = await onQueueEnded((event) => console.log('queue ended', event));
+const unPreviousAlbumNeeded = await onPreviousAlbumNeeded((event) => console.log('previous album needed', event));
+
+// Call the returned cleanup functions when you no longer need the listeners
+unPlay();
+unPause();
+unNext();
+unPrev();
+unQueueEnded();
+unPreviousAlbumNeeded();
 ```
 
 ## API Reference
@@ -319,6 +346,90 @@ Seeks to a specific position in the current track.
 - `position` (number): Position in milliseconds
 
 **Returns:** `Promise<{ success: boolean }>`
+
+### `setPlayingQueue(queue: PlayingQueue, playMode: PlayMode)`
+
+Sets or replaces the current playback queue and the active track index.
+
+**Parameters:**
+- `queue` (PlayingQueue): The queue object containing `songs` and `currentIndex`
+- `playMode` (PlayMode): Playback mode, one of `sequential`, `shuffle`, or `loop`
+
+**Returns:** `Promise<{ success: boolean; message?: string }>`
+
+**Notes:**
+- Use this to load a single album or playlist into the player.
+- The queue is persisted for Android media controls and service restart.
+- When loading a new album, call `clearPlayingQueue()` first if you want to discard the previous queue completely.
+
+### `getPlaybackSession()`
+
+Reads the current playback session state from the plugin.
+
+**Returns:** `Promise<PlaybackSession>`
+
+```typescript
+interface PlaybackSession {
+  queue: PlayingQueue;
+  runtime: PlaybackRuntime;
+  playMode: PlayMode;
+  currentSongId: number | null;
+}
+```
+
+**Notes:**
+- Useful for debugging queue state and restoring UI after a page reload.
+- Includes the current queue, runtime position, duration, and selected playback mode.
+
+### `clearPlayingQueue()`
+
+Clears the active queue from the music player.
+
+**Returns:** `Promise<{ success: boolean; message?: string }>`
+
+**Notes:**
+- Use this before loading a completely different album or playlist.
+- This helps avoid stale queue state when switching between album-based playback sessions.
+
+### `onPlay(handler: (data: PlaybackEvent) => void)`
+
+Registers a listener for the play event.
+
+**Returns:** `Promise<PluginListener>`
+
+### `onPause(handler: (data: PlaybackEvent) => void)`
+
+Registers a listener for the pause event.
+
+**Returns:** `Promise<PluginListener>`
+
+### `onNext(handler: (data: PlaybackEvent) => void)`
+
+Registers a listener for the next track event.
+
+**Returns:** `Promise<PluginListener>`
+
+### `onPrev(handler: (data: PlaybackEvent) => void)`
+
+Registers a listener for the previous track event.
+
+**Returns:** `Promise<PluginListener>`
+
+### `onQueueEnded(handler: (data: PlaybackEvent) => void)`
+
+Registers a listener for queue completion. This is typically used when an album or playlist reaches its end.
+
+**Returns:** `Promise<PluginListener>`
+
+### `onPreviousAlbumNeeded(handler: (data: PlaybackEvent) => void)`
+
+Registers a listener for the special event fired when the user requests `previous()` at the first track of the current album.
+
+**Returns:** `Promise<PluginListener>`
+
+**Notes:**
+- Use this to load the previous album and jump to its last track.
+- This event is useful when the app is managing albums individually and the Android service only knows the current album queue.
 
 ### `getState()`
 

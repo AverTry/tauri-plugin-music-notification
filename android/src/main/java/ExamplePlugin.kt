@@ -1,10 +1,10 @@
 package com.plugin.music_notification
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.util.Log
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -12,6 +12,9 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import app.tauri.plugin.Invoke
 import org.json.JSONArray
+import android.util.Log
+import android.content.IntentFilter
+import android.os.Build
 
 @InvokeArg
 class PingArgs {
@@ -88,8 +91,7 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
         private const val TAG = "MusicNotificationPlugin"
         private const val PREFS_NAME = "music_notification"
         private const val PREF_SERVER_LIB_NAME = "server_lib_name"
-
-        var instance: MusicNotificationPlugin? = null
+        private const val MUSIC_EVENT_ACTION = "MUSIC_NOTIFICATION_EVENT"
 
         fun getServerLibName(context: Context): String? {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -97,16 +99,56 @@ class MusicNotificationPlugin(private val activity: Activity): Plugin(activity) 
         }
     }
 
+    private var eventReceiver: BroadcastReceiver? = null
 
     override fun load(webview: android.webkit.WebView) {
         super.load(webview)
-        instance = this
+        Log.d(TAG, "Plugin loaded, registering broadcast receiver")
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                Log.d(TAG, "BroadcastReceiver.onReceive called with action: ${intent?.action}")
+                if (intent?.action == MUSIC_EVENT_ACTION) {
+                    val eventName = intent.getStringExtra("eventName")
+                    val action = intent.getStringExtra("action")
+                    val currentIndex = intent.getIntExtra("currentIndex", -1)
+                    val isPlaying = intent.getBooleanExtra("isPlaying", false)
+                    val trackId = intent.getLongExtra("trackId", -1L)
+
+                    Log.d(TAG, "Event received: eventName=$eventName, action=$action, currentIndex=$currentIndex, isPlaying=$isPlaying, trackId=$trackId")
+
+                    if (eventName != null) {
+                        val payload = JSObject()
+                        payload.put("action", action)
+                        payload.put("currentIndex", currentIndex)
+                        payload.put("isPlaying", isPlaying)
+                        if (trackId != -1L) payload.put("trackId", trackId)
+                        
+                        try {
+                            trigger(eventName, payload)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to trigger event: $eventName", e)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Save it to the class property
+        this.eventReceiver = receiver
+        
+        // Register it using the local variable 'receiver' (prevents the smart cast error)
+        val filter = IntentFilter(MUSIC_EVENT_ACTION)
+        LocalBroadcastManager.getInstance(activity).registerReceiver(receiver, filter)
+        Log.d(TAG, "Local broadcast receiver registered")
     }
 
-    // override fun onStop() {
-    //     instance = null
-    //     super.onStop()
-    // }
+    override fun onDestroy() {
+        super.onDestroy()
+        eventReceiver?.let { LocalBroadcastManager.getInstance(activity).unregisterReceiver(it) }
+        eventReceiver = null
+        Log.d(TAG, "Local broadcast receiver unregistered")
+    }
 
     @Command
     fun ping(invoke: Invoke) {
