@@ -496,7 +496,7 @@ class MusicPlayerService : Service() {
                     Log.d(TAG, "Action: PLAY")
                     val url = it.getStringExtra(EXTRA_URL) ?: run {
                         Log.e(TAG, "URL is null, returning")
-                        return START_STICKY
+                        return START_NOT_STICKY
                     }
                     val title = it.getStringExtra(EXTRA_TITLE) ?: "Unknown Title"
                     val artist = it.getStringExtra(EXTRA_ARTIST) ?: "Unknown Artist"
@@ -573,7 +573,22 @@ class MusicPlayerService : Service() {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
 
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+
+        // 1. Remove the sticky notification from status bar
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+
+        // 2. Shut down the native service completely
+        stopSelf()
     }
 
     fun setPlayingQueue(songs: List<QueueSongInfo>, currentIndex: Int?, newPlayMode: String) {

@@ -12,7 +12,8 @@
         <service
             android:name="com.plugin.music_notification.MusicPlayerService"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="true" />
 
         <receiver android:name="com.plugin.music_notification.SafeMediaButtonReceiver"
             android:exported="true">
